@@ -1,0 +1,17 @@
+﻿@charset 'utf-8';
+
+.w3-theme-light {color:#fff !important; background-color:#262626 !important}
+.w3-hover-theme-light:hover {color:#fff !important; background-color:#262626 !important}
+.w3-theme-dark {color:#fff !important; background-color:#393939 !important}
+.w3-hover-theme-dark:hover {color:#fff !important; background-color:#393939 !important}
+.w3-theme {color:#fff !important; background-color:#393939 !important}
+.w3-text-theme {color:#393939 !important}
+.w3-hover-theme:hover {color:#fff !important; background-color:#393939 !important}
+.w3-hover-text-theme:hover {color:#F58809 !important}
+.w3-theme-button {color:#fff !important; background-color:#262626 !important}
+.w3-hover-theme-button:hover {color:#fff !important; background-color:#444444 !important}
+.w3-theme-table {color:#fff !important; background-color:#444444 !important}
+
+body::-webkit-scrollbar { display: none; }
+.w3-scrollbar { overflow: hidden; }
+.w3-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

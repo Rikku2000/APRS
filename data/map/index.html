@@ -1,0 +1,443 @@
+﻿<!DOCTYPE HTML>
+	<html lang="en-US">
+		<head>
+			<title>APRS-Server</title>
+			<meta charset="UTF-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1">
+			<meta name="robots" content="index" />
+			<meta name="robots" content="follow" />
+			<meta name="language" content="English" />
+			<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+			<meta http-equiv="cache-control" content="max-age=0" />
+			<meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
+			<meta http-equiv="expires" content="0" />
+			<meta http-equiv="pragma" content="no-cache" />
+			<script src="jquery.js"></script>
+			<script src="jQueryRotate.js"></script>
+			<script src="leaflet.js"></script>
+			<script src="L.Control.Zoomslider.js"></script>
+			<script src="leaflet.label.js"></script>
+			<link rel="stylesheet" href="style/leaflet/leaflet.css" />
+			<link rel="stylesheet" href="style/leaflet/L.Control.Zoomslider.css" />
+			<link rel="stylesheet" href="style/leaflet/leaflet.label.css" />
+			<link rel="stylesheet" href="style/w3.css">
+			<link rel="stylesheet" href="style/custom.css">
+		</head>
+		<body class="w3-theme-dark">
+			<div class="w3-row">
+				<div class="w3-col m8">
+					<div id="map" style="position:relative; color: #000000; width: 100%; min-height: 100vh; height: 100vh; max-height: 100vh; z-index:0;">
+						<div  style="background: rgba(0, 0, 0, 0.85); width: 100%; min-height: 100vh; height: 100vh; max-height: 100vh; z-index: 1;"></div>
+					</div>
+				</div>
+				<div class="w3-col m4">
+					<h1 class="w3-center">APRS-Server</h1>
+					<div class="w3-container w3-center w3-padding-large">
+						<div class="w3-hover-theme-dark" id="userpanel">
+						</div>
+						</br>
+						<div class="w3-center">
+							<table class="w3-border-bottom w3-theme-light w3-table" style="border-top-left-radius: 8px; border-top-right-radius: 8px;">
+								<thead>
+									<tr>
+										<td style="width: 10%;">Id</td>
+										<td style="width: 90%;">Users: <span id="userinfo" style="text-decoration: none; font-size: 14px;"></span> / Message</td>
+									</tr>
+								</thead>
+							</table>
+							<div class="w3-scrollbar" style="display: block; height: 650px; overflow-y: scroll;">
+								<table class="w3-table">
+									<tbody id="userlist">
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="w3-center w3-small">- 13MAD86 / Martin -<div class="w3-center w3-tiny">Version 1.0 (BETA)</div></div>
+			</div>
+			<script>
+				var hashusr = "";
+
+				function float2int (value) { return value | 0; }
+
+				if(window.location.hash)
+					hashusr = window.location.hash.substr(1).toUpperCase();
+
+				var colors = ['#000000','#592900','#C90000','#FF5900','#EDEB00','#00C900','#0000C9','#FF0094','#00007B','#FFFFFF'];
+
+				var map = L.map('map', {center: [51, 11], zoom: (hashusr == "" ? 7 : 5), zoomControl: false, zoomsliderControl: true});
+				map.doubleClickZoom.disable();
+				map.on('dblclick', function(e) {
+					UpdateData('MARKER', 'Never', e.latlng.lat.toFixed(7), e.latlng.lng.toFixed(7), 0, 0, '', 0, '/"', 0, '', '');
+				});
+
+				var project = function (map, crs, latlng) {
+					return crs.latLngToPoint(latlng, map.getZoom());
+				};
+
+				L.TileLayer.prototype._update = function () {
+					var bounds = this._map.getPixelBounds(), zoom = this._map.getZoom(), tileSize = this.options.tileSize;
+
+					if (typeof this.options.crs !== 'undefined') {
+						bounds.min = project(this._map, this.options.crs, this._map.unproject(bounds.min));
+						bounds.max = project(this._map, this.options.crs, this._map.unproject(bounds.max));
+					}
+
+					if (zoom > this.options.maxZoom || zoom < this.options.minZoom)
+						return;
+
+					var nwTilePoint = new L.Point(Math.floor(bounds.min.x / tileSize), Math.floor(bounds.min.y / tileSize)), seTilePoint = new L.Point(Math.floor(bounds.max.x / tileSize), Math.floor(bounds.max.y / tileSize)), tileBounds = new L.Bounds(nwTilePoint, seTilePoint);
+					this._addTilesFromCenterOut(tileBounds);
+
+					if (this.options.unloadInvisibleTiles || this.options.reuseTiles)
+						this._removeOtherTiles(tileBounds);
+				};
+
+				L.TileLayer.prototype._getTilePos = function (tilePoint) {	
+					var origin = this._map.getPixelOrigin(),
+					tileSize = this.options.tileSize;
+
+					if (typeof this.options.crs !== 'undefined')
+						origin = project(this._map, this.options.crs, this._map.unproject(origin));
+
+					return tilePoint.multiplyBy(tileSize).subtract(origin);
+				};
+
+				var openstreetmap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 15, attribution: 'Open Street Map', opacity: 0.75 });
+				openstreetmap.addTo(map);
+
+				var basemaps = { "Open Street Map": openstreetmap };
+
+				var pad = function(num, size) {
+					var s = num+"";
+					while (s.length < size)
+						s = "0" + s;
+
+					return s;
+				};
+
+				var marker_cache = [];
+
+				var UpdateData = function(user,dt,lat,lon,speed,heading,id,age,symbol,registered,comment,status,caption) {
+					if(marker_cache.length == 0)
+						map.setView([lat,lon]);
+
+					var sip = symbolToImage(symbol);
+					var sipx = '<div style="display:inline-block;overflow:hidden;height:24px;width:24px;font-weight:bold;color:white;text-align:center;padding:3px 1px 1px 1px;font-size:14px;' + sip[0] + '">&nbsp;' + sip[1] + '&nbsp;</div>';	
+
+					var txt = '<div><table cellpadding="1" cellspacing="1" border="0" style="font-size:14px;">';
+					txt += '<tr><td width="64">Received:</td><td> '+dt+' UTC</td></tr>';
+					txt += '<tr><td width="64" rowspan="3">Position:</td><td style="border-top: solid 1px #fff;"> '+lat + '' + (lat > 0 ? "N" : "S") +' '+lon+''+ (lon > 0 ? "E" : "W") + '</td></tr>';
+					var lat2 = pad(Math.floor(lat), 2)  + '&deg;' + pad(((lat - Math.floor(lat)) * 60).toFixed(4), 2) + "'" + (lat > 0 ? "N" : "S");
+					var lon2 = pad(Math.floor(lon), 3) + '&deg;' + pad(((lon - Math.floor(lon)) * 60).toFixed(4), 2) + "'" + (lon > 0 ? "E" : "W");
+					txt += '<tr><td> '+lat2+' '+lon2+'</td></tr>';
+					var lat3 = pad(Math.floor(lat), 2)  + '&deg;' + pad(Math.floor((lat - Math.floor(lat)) * 60), 2) + "'" + pad(((((lat - Math.floor(lat)) * 60) - Math.floor((lat - Math.floor(lat)) * 60)) * 60).toFixed(2),2) + '"' + (lat > 0 ? "N" : "S");
+					var lon3 = pad(Math.floor(lon), 3) + '&deg;' + pad(Math.floor((lon - Math.floor(lon)) * 60), 2) + "'" + pad(((((lon - Math.floor(lon)) * 60) - Math.floor((lon - Math.floor(lon)) * 60)) * 60).toFixed(2),2) + '"' + (lon > 0 ? "E" : "W");
+					txt += '<tr><td style="border-bottom: solid 1px #fff;"> '+lat3+' '+lon3+'</td></tr>';
+					txt += '<tr><td width="64">Speed:</td><td style="border-bottom: solid 1px #fff;"> '+speed+' km/h; '+(speed * 0.62137119).toFixed(1)+' mph; '+(speed / 1.852).toFixed(1)+' knots</td></tr>';
+					txt += '<tr><td width="64">Heading:</td><td style="border-bottom: solid 1px #fff;"> '+heading+'&deg; '+HeadingToText(heading)+'</td></tr>';
+					txt += '<tr><td width="64">Comment:</td><td style="border-bottom: solid 1px #fff;">'+comment+'</td></tr>';
+					txt += '</div>';
+
+					for(i=0;i<marker_cache.length;i++)
+						marker_cache[i].marker.closePopup();
+
+					for(i=0;i<marker_cache.length;i++) {	
+						if(marker_cache[i].user == user) {
+							var mc = marker_cache[i];
+							txt = '<table style="width:260px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:260px;">' + txt;	
+
+							mc.id = id;
+							mc.age = age;
+							if(dt != mc.dt) {
+								var ci = Math.round(mc.age / 15);
+								if(ci > 255)
+									ci = 255;
+								var opc = 1 - ci / 450;
+								ci = 'rgb('+ci+','+ci+','+ci+')';
+								$("#usericon"+mc.id).css('opacity',opc);
+							};
+
+							if ((lat != mc.lat) || (lon != mc.lon))  {
+								mc.llarray.push([lat,lon]);
+								mc.lat = lat; mc.lon = lon; 	
+								mc.marker.setLatLng([lat,lon]);
+								mc.marker.label.setLatLng([lat,lon]);
+							};	
+
+							if(mc.symbol != symbol) {
+								var si = symbolToImage(symbol);
+								$("#usericon"+mc.id)[0].outerHTML = '<div id="usericon'+mc.id+'" class="aprs-usericon" style="'+si[0]+';font-weight:bold;color:white;text-align:center;padding: 3px 1px 3px 1px;">&nbsp;'+si[1]+'&nbsp;</div>';
+							};
+
+							if(mc.heading != heading)
+								$("#img"+id).css({'-webkit-transform' : 'rotate('+ mc.heading +'deg)','-moz-transform' : 'rotate('+ mc.heading +'deg)','-ms-transform' : 'rotate('+ mc.heading +'deg)','transform' : 'rotate('+ mc.heading +'deg)'});
+
+							mc.symbol = symbol; mc.heading = heading; mc.speed = speed; mc.dt = dt;
+							mc.marker.bindPopup(txt);
+
+							if(mc.follow)
+								map.setView([lat,lon]);
+
+							if(mc.line != null) 
+								mc.line.setLatLngs(mc.llarray);
+							else if((mc.llarray != null) && (mc.llarray.length > 1)) {
+								mc.line = new L.Polyline(mc.llarray,{color:mc.color,weight:3});
+								mc.line.addTo(map);
+							};
+
+							return;
+						};
+					};
+
+					var symba = symbolToImage(symbol);
+					var symbolImage = symba[0];
+
+					txt = '<table style="width:260px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:260px;">' + txt;
+					var mc = {"user":user,"lat":lat,"lon":lon,"heading":heading,"speed":speed,"dt":dt,"id":id,"age":age,"symbol":symbol};
+					mc.color = colors[id % 10];
+					mc.follow = false;
+					mc.comment = comment;
+					mc.llarray = [[lat,lon]];
+					mc.tableicon = symbolImage;
+					mc.line = null;
+					mc.icon = new L.DivIcon({className: 'aprs-clear', html: '<div id="usericon'+id+'" class="aprs-usericon" style="'+symbolImage+';font-weight:bold;color:white;text-align:center;padding: 3px 1px 3px 1px;"><img id="img'+id+'" src="style/arrow.png" class="aprs-hdg"/>&nbsp;'+symba[1]+'&nbsp;</div>'});
+					mc.marker = new L.Marker([lat,lon], {icon: mc.icon});
+					mc.marker.bindPopup(txt);
+					mc.marker.bindLabel(typeof caption !== 'undefined' ? caption : user, { direction: 'right', noHide:true });
+					mc.marker.addTo(map);
+
+					$("#img"+id).css({'-webkit-transform' : 'rotate('+ mc.heading +'deg)','-moz-transform' : 'rotate('+ mc.heading +'deg)','-ms-transform' : 'rotate('+ mc.heading +'deg)','transform' : 'rotate('+ mc.heading +'deg)'});
+
+					var ci = Math.round(mc.age / 15);
+					if(ci > 255)
+						ci = 255;
+					var opc = 1 - ci / 450;
+					ci = 'rgb('+ci+','+ci+','+ci+')';
+					$("#usericon"+id).css('opacity',opc);
+					marker_cache.push(mc);
+
+					UpdateStatus();
+				}
+
+				var symbolToImage = function(symb) {
+					var prose = 'primary';
+					var label = '';
+					if(symb.length == 2) {
+						if(symb[0] == '\\') 
+							prose = 'secondary';
+						else if ((symb[0] != '/') && (("#&0>AW^_acnsuvz").indexOf(symb[1]) >= 0)) {
+							prose = "secondary";
+							label = symb[0].toString();
+							if (("#0A^cv").indexOf(symb[1]) >= 0) {
+								label = "<span style=\"color:black;\">" + label + "</span>";
+							};
+						};
+						symb = symb.substr(1);
+					};
+					var symbtable = '!"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
+					var idd = symbtable.indexOf(symb);
+					if(idd < 0)
+						idd = 14;
+					var itop =  Math.floor(idd / 16) * 24;
+					var ileft = (idd % 16) * 24;
+
+					return ['background:url(style/'+ prose +'.png) -'+ileft+'px -'+itop+'px no-repeat;', label];
+				}
+
+				var HeadingToText = function(hdg) {
+					var d = Math.round(hdg / 22.5);
+					switch (d) {
+						case 0: return "N";
+						case 1: return "NNE";
+						case 2: return "NE";
+						case 3: return "NEE";
+						case 4: return "E";
+						case 5: return "SEE";
+						case 6: return "SE";
+						case 7: return "SSE";
+						case 8: return "S";
+						case 9: return "SSW";
+						case 10: return "SW";
+						case 11: return "SWW";
+						case 12: return "W";
+						case 13: return "NWW";
+						case 14: return "NW";
+						case 15: return "NNW";
+						case 16: return "N";
+						default: return "";
+					};
+				}
+
+				var UpdateStatus = function() {
+					var html = '<input class="w3-input w3-border w3-round-large" type="text" id="Locate" onkeyup="onLocate(event)" placeholder="Locate / Callsign" value="'+hashusr+'"></input></br>';
+					html += '<a class="w3-button w3-theme-button w3-hover-theme-button w3-round-large" style="text-decoration:none;" href="#" onclick="onReset(event)">Reset</a> ';
+					html += '<a class="w3-button w3-theme-button w3-hover-theme-button w3-round-large" style="text-decoration:none;" href="#" onclick="onFollow(event)">Follow User</a> ';
+					html += '<a class="w3-button w3-theme-button w3-hover-theme-button w3-round-large" style="text-decoration:none;" href="#" onclick="ClearPath();return false;">Clear Path</a> ';
+					html += '<a class="w3-button w3-theme-button w3-hover-theme-button w3-round-large" style="text-decoration:none;" href="#" onclick="ClearMap();return false;">Clear All</a>';
+
+					$("#userpanel").html(html);
+
+					var uinfo = ' <b>'+ (marker_cache.length) +'</b>';
+					$("#userinfo").html(uinfo);
+
+					var string1 = "0", string2 = "0", result = "0";
+
+					var table_row = 'w3-theme-dark', udt = '', ulist = '';
+					if (marker_cache.length > 0) {
+						for (i = marker_cache.length - 1; i >= 0; i--) {
+							if (table_row == "w3-theme-table")
+								table_row = "w3-theme-dark";
+							else
+								table_row = "w3-theme-table";
+
+							if (marker_cache[i].dt.toString() != udt.toString())
+								ulist += '<tr class="w3-border-bottom w3-theme-light"><td colspan="3"><b class="w3-tiny">'+ marker_cache[i].dt +'</b></td></tr>';
+							ulist += '<tr class="'+ table_row +'">';
+							ulist += '<td class="w3-border-bottom" style="width: 10%;">'+ (i + 1) +'</td>';
+							ulist += '<td class="w3-border-bottom" style="width: 90%;"><div><a class="w3-hover-theme-dark w3-hover-text-theme" style="text-decoration: none;" href="#" onclick="Locate(\''+ marker_cache[i].user +'\');return false;"><div class="w3-image" style="float: left; '+ marker_cache[i].tableicon +'; height: 24px; width: 24px;"></div> <b>'+ marker_cache[i].user +'</b></a> | <small>Position: '+ marker_cache[i].lat +' / '+ marker_cache[i].lon +'</small></div></br><small>'+ marker_cache[i].comment +'</small></td>';
+							ulist += '</tr>';
+							udt = marker_cache[i].dt;
+						}
+					} else {
+						ulist = '<tr><td colspan="3">NONE</td></tr>';
+					};
+					$("#userlist").html(ulist);
+				}
+
+				var Locate = function(u) {
+					for(i=0;i<marker_cache.length;i++) 
+						if(marker_cache[i].user == u)
+							map.setView([marker_cache[i].lat,marker_cache[i].lon]);
+
+					$("#Locate").val(u);
+				}
+
+				var onLocate = function(e) {
+					if(e.keyCode != 13)
+						return;	
+
+					var usr = document.getElementById('Locate').value.toString().toUpperCase();
+					Locate(usr);
+				}
+
+				var onFollow = function(e) {
+					hashusr = $("#Locate").val();
+					Follow();
+				}
+
+				var onReset = function(e) {
+					document.getElementById('Locate').value = "";
+					hashusr = "";
+				}
+
+				var ClearPath = function() {
+					for(i=0;i<marker_cache.length;i++) {	
+						if(marker_cache[i].line != null)
+							map.removeLayer(marker_cache[i].line);
+						marker_cache[i].line = null;
+						marker_cache[i].llarray = [[marker_cache[i].lat,marker_cache[i].lon]];
+					};
+				};
+
+				var ClearMap = function() {
+					for(i=0;i<marker_cache.length;i++) {	
+						if(marker_cache[i].line != null)
+							map.removeLayer(marker_cache[i].line);
+						marker_cache[i].line = null;
+						map.removeLayer(marker_cache[i].marker);	
+						marker_cache[i].marker = null;
+					};
+					marker_cache = [];
+					UpdateStatus();
+				};
+
+				var ClearStatic = function() {
+					var tmpa = [];
+					for(i=0;i<marker_cache.length;i++) {
+						if(marker_cache[i].id < 0) {
+							map.removeLayer(marker_cache[i].marker);	
+							marker_cache[i].marker = null;
+						} else 
+							tmpa.push(marker_cache[i]);
+					};
+					marker_cache = tmpa;
+					UpdateStatus();
+				};
+
+				var UpdateBuddies = function() {
+					for(i=0;i<marker_cache.length;i++)  {
+						marker_cache[i].age += 15;
+						var ci = Math.round(marker_cache[i].age / 15);
+						if(ci > 255)
+							ci = 255;
+						var opc = 1 - ci / 450;
+						ci = 'rgb('+ci+','+ci+','+ci+')';
+						$("#usericon"+marker_cache[i].id).css('opacity',opc);
+					};
+					setTimeout(UpdateBuddies,5000);
+				};
+
+				var UpdateFromWebSocket = function(data) {
+					if (data instanceof Blob) {
+						var reader = new FileReader();
+						reader.onload = () => { UpdateFromWebSocket(reader.result); };
+						reader.readAsText(data);
+						return;
+					};
+
+					if(data.indexOf(">>") < 0)
+						return;
+
+					var aCom = data.match(/^(\d{1,2}:\d{1,2}:\d{1,2}\s\d{1,2}.\d{1,2}.\d{2,4}\sUTC)\s(\S+)\s>>\s([\d.\-]+)\s([\d.\-]+)\s([\d.\-]+)\s(\d+)\s(\d+)\s(\S\S)/);	
+					if((aCom == null) || (aCom.length == 0))
+						return;
+
+					var comment = data;
+					if (comment.includes("A=")) {
+						comment = comment.split("A=").pop();
+						comment = comment.slice(6);
+					} else if (comment.includes(aCom[8])) {
+						comment = comment.split(aCom[8]).pop();
+					};
+					UpdateData(aCom[2],new Date(),parseFloat(aCom[3]),parseFloat(aCom[4]),parseInt(aCom[7]),parseInt(aCom[6]),aCom[2],0,aCom[8],0,comment,data);
+					if(hashusr == aCom[2])
+						Follow();
+				}	
+
+				var Follow = function() {
+					if(hashusr != "") {
+						for(i=0;i<marker_cache.length;i++) 
+							if(marker_cache[i].user == hashusr)
+								map.setView([marker_cache[i].lat,marker_cache[i].lon]);
+					};
+				}
+
+				UpdateStatus();
+				UpdateBuddies();
+
+				var socket = null;
+				var Reconnect = function() { 
+					var socket_url = 'ws://'+location.hostname+':8060/';
+					socket = new WebSocket(socket_url);
+					socket.onopen = function() { };
+					socket.onmessage = function (evt) { UpdateFromWebSocket(evt.data);  };
+					socket.onclose = function() { 
+						alert('Connection with server has been lost!\r\nPlease reload page to connect again\r\nor just click OK button to try'); 
+						Reconnect();
+					};
+				};
+				Reconnect();
+
+				function iss_fetch_data () {
+					fetch("https://api.wheretheiss.at/v1/satellites/25544").then((response) => response.json()).then((iss) => {
+						UpdateData('ARISS-10', new Date(), iss.latitude, iss.longitude, float2int (iss.velocity), 0, '', 0, '\S', 0, 'International Space Station', '');
+
+						fetch("https://api.wheretheiss.at/v1/satellites/25544").then((response) => response.json()).then((iss) => { setTimeout(iss_fetch_data, 15000); })
+					});
+				}
+				iss_fetch_data ();
+			</script>
+		</body>
+	</html>
