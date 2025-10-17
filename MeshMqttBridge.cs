@@ -23,6 +23,7 @@ namespace APRSForwarder
         private readonly string _pass;
         private readonly string _topic;
         private readonly int _keepAlive;
+        private readonly int _threadSleep;
 
         private readonly string _nodePrefix;
         private readonly string _symbol;
@@ -31,12 +32,18 @@ namespace APRSForwarder
         private Thread _thr;
         private volatile bool _running;
 
+		private class NodeInfo { public string Name; public string Fw; public string Hw; public string Model; public string Chan; public DateTime Ts; }
+		private class NodeText { public string Text; public string To; public DateTime Ts; }
 		private class NodePos { public double Lat; public double Lon; public int? Alt; public DateTime Ts; }
 		private class NodeTel { public string Snippet; public DateTime Ts; }
 
+		private Dictionary<string, NodeInfo> _infoCache = new Dictionary<string, NodeInfo>();
+		private Dictionary<string, NodeText> _textCache = new Dictionary<string, NodeText>();
 		private Dictionary<string, NodePos> _posCache = new Dictionary<string, NodePos>();
 		private Dictionary<string, NodeTel> _telCache = new Dictionary<string, NodeTel>();
 
+		private readonly TimeSpan _infoFresh = TimeSpan.FromMinutes(30);
+		private readonly TimeSpan _textFresh = TimeSpan.FromMinutes(15);
 		private readonly TimeSpan _posFresh = TimeSpan.FromMinutes(15);
 		private readonly TimeSpan _telFresh = TimeSpan.FromMinutes(10);
 
@@ -45,8 +52,8 @@ namespace APRSForwarder
             string host, int port,
             bool useTls, bool tlsIgnoreErrors,
             string user, string pass,
-            string topic, int keepAliveSecs,
-            string nodePrefix, string symbol, string commentSuffix)
+            string topic, int keepAlive,
+            string nodePrefix, string symbol, string commentSuffix, int threadSleep)
         {
             _gw = gw;
             _host = IsNullOrWhiteSpace(host) ? "mqtt.meshtastic.org" : host;
@@ -56,10 +63,11 @@ namespace APRSForwarder
             _user = (user == null) ? "meshdev" : user;
             _pass = (pass == null) ? "large4cats" : pass;
             _topic = IsNullOrWhiteSpace(topic) ? "msh/US/#" : topic;
-            _keepAlive = (keepAliveSecs > 0) ? keepAliveSecs : 60;
+            _keepAlive = (keepAlive > 0) ? keepAlive : 60;
             _nodePrefix = IsNullOrWhiteSpace(nodePrefix) ? "MT0XYZ" : nodePrefix;
             _symbol = IsNullOrWhiteSpace(symbol) ? "/[" : symbol;
             _commentSuffix = IsNullOrWhiteSpace(commentSuffix) ? "via Meshtastic" : commentSuffix;
+            _threadSleep = (threadSleep > 0) ? threadSleep : 3000;
         }
 
         public void Start()
@@ -176,7 +184,7 @@ namespace APRSForwarder
                 {
                 }
 
-                if (_running) Thread.Sleep(3000);
+                if (_running) Thread.Sleep(_threadSleep);
             }
         }
 
@@ -333,11 +341,16 @@ namespace APRSForwarder
 			m = Regex.Match(json, "\"voltage\"\\s*:\\s*(\\d+(?:\\.\\d+)?)", RegexOptions.CultureInvariant);
 			if (m.Success) volt = ToNumStr2(m.Groups[1].Value) + "V";
 
-			m = Regex.Match(json, "\"temperature(C)?\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)", RegexOptions.CultureInvariant);
-			if (!m.Success) m = Regex.Match(json, "\"temperature\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)", RegexOptions.CultureInvariant);
-			if (m.Success) tempC = ToNumStr1(m.Groups[m.Groups.Count - 1].Value) + "C";
+			m = Regex.Match(json, "\"(environmentMetrics\"\\s*:\\s*\\{[^}]*?)?\"temperature(C)?\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)", RegexOptions.CultureInvariant);
+			if (!m.Success)
+				m = Regex.Match(json, "\"temperature\"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)", RegexOptions.CultureInvariant);
+			if (m.Success)
+			{
+				string v = (m.Groups.Count >= 4 && m.Groups[3].Success) ? m.Groups[3].Value : m.Groups[m.Groups.Count - 1].Value;
+				tempC = ToNumStr1(v) + "C";
+			}
 
-			m = Regex.Match(json, "\"hum(idity)?\"\\s*:\\s*(\\d+(?:\\.\\d+)?)", RegexOptions.CultureInvariant);
+			m = Regex.Match(json, "\"(relative)?hum(idity)?\"\\s*:\\s*(\\d+(?:\\.\\d+)?)", RegexOptions.CultureInvariant);
 			if (m.Success) humPct = ToNumStr0(m.Groups[m.Groups.Count - 1].Value) + "%";
 
 			m = Regex.Match(json, "\"(barometric)?pressure\"\\s*:\\s*(\\d+(?:\\.\\d+)?)", RegexOptions.CultureInvariant);
@@ -380,9 +393,9 @@ namespace APRSForwarder
 
 		private Dictionary<string, DateTime> _lastInfoAnnounce = new Dictionary<string, DateTime>();
 
-		private static bool TryExtractNodeInfoFromJson(string json, out string name, out string fw, out string hw)
+		private static bool TryExtractNodeInfoFromJson(string json, out string name, out string fw, out string hw, out string model)
 		{
-			name = fw = hw = null;
+			name = fw = hw = model = null;
 			if (string.IsNullOrEmpty(json)) return false;
 
 			string s = ExtractFirstString(json, "\"longName\"\\s*:\\s*\"([^\"]+)\"");
@@ -392,11 +405,26 @@ namespace APRSForwarder
 
 			fw = ExtractFirstString(json, "\"firmware\"\\s*:\\s*\"([^\"]+)\"");
 			if (string.IsNullOrEmpty(fw)) fw = ExtractFirstString(json, "\"fw\"\\s*:\\s*\"([^\"]+)\"");
+			if (string.IsNullOrEmpty(fw)) fw = ExtractFirstString(json, "\"version\"\\s*:\\s*\"([^\"]+)\"");
 
-			hw = ExtractFirstString(json, "\"hw(Model|Version)?\"\\s*:\\s*\"([^\"]+)\"");
-			if (string.IsNullOrEmpty(hw)) hw = ExtractFirstString(json, "\"hardware\"\\s*:\\s*\"([^\"]+)\"");
+			hw = ExtractFirstString(json, "\"hardware\"\\s*:\\s*\"([^\"]+)\"");
+			if (string.IsNullOrEmpty(hw)) hw = ExtractFirstString(json, "\"hw(Model|Version)?\"\\s*:\\s*\"([^\"]+)\"");
+			model = ExtractFirstString(json, "\"model\"\\s*:\\s*\"([^\"]+)\"");
 
-			return name != null || fw != null || hw != null;
+			return (name != null) || (fw != null) || (hw != null) || (model != null);
+		}
+
+		private static string MakeInfoSnippet(string name, string fw, string hw, string model, string chan)
+		{
+			StringBuilder sb = new StringBuilder();
+			if (!IsNullOrWhiteSpace(name))  { sb.Append("Node:").Append(SanitizeAscii(name, 18)).Append(' '); }
+			if (!IsNullOrWhiteSpace(fw))    { sb.Append("FW:").Append(SanitizeAscii(fw, 12)).Append(' '); }
+			if (!IsNullOrWhiteSpace(hw))    { sb.Append("HW:").Append(SanitizeAscii(hw, 12)).Append(' '); }
+			if (!IsNullOrWhiteSpace(model)) { sb.Append("MD:").Append(SanitizeAscii(model, 10)).Append(' '); }
+			if (!IsNullOrWhiteSpace(chan))  { sb.Append("Ch:").Append(SanitizeAscii(chan, 10)).Append(' '); }
+			string outp = sb.ToString().Trim();
+			if (outp.Length > 70) outp = outp.Substring(0, 70);
+			return outp;
 		}
 
 		private static string ChannelFromTopic(string topic)
@@ -415,32 +443,35 @@ namespace APRSForwarder
 			text = null; to = null;
 			if (string.IsNullOrEmpty(json)) return false;
 
-			Match mt = Regex.Match(json, "\"text\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"", RegexOptions.CultureInvariant);
+			Match mt =
+				Regex.Match(json, "\"payload\"\\s*:\\s*\\{[^}]*?\"text\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"", RegexOptions.CultureInvariant);
+			if (!mt.Success)
+				mt = Regex.Match(json, "\"decoded\"\\s*:\\s*\\{[^}]*?\"(payload|text)\"[^}]*?\"text\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"", RegexOptions.CultureInvariant);
+			if (!mt.Success)
+				mt = Regex.Match(json, "\"text\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"", RegexOptions.CultureInvariant);
+
 			if (!mt.Success) return false;
 
-			text = mt.Groups[1].Value;
-			text = text.Replace("\\\"", "\"").Replace("\\n", " ").Replace("\\r", " ").Replace("\\t", " ");
+			string raw = (mt.Groups.Count >= 3 && mt.Groups[2].Success) ? mt.Groups[2].Value : mt.Groups[1].Value;
+			text = raw.Replace("\\\"", "\"").Replace("\\n", " ").Replace("\\r", " ").Replace("\\t", " ");
 			text = SanitizeAscii(text, 67);
+			if (text.Length == 0) return false;
 
-			string[] destKeys = new string[] { "to", "toId", "toCall", "dest", "destination" };
-			int i;
-			for (i = 0; i < destKeys.Length; i++)
+			string[] keys = new string[] { "toCall", "toId", "destination", "destinationId", "dest", "to" };
+			for (int i = 0; i < keys.Length; i++)
 			{
-				string pat = "\"" + destKeys[i] + "\"\\s*:\\s*\"([^\"]+)\"";
+				string pat = "\"" + keys[i] + "\"\\s*:\\s*\"([^\"]+)\"";
 				Match md = Regex.Match(json, pat, RegexOptions.CultureInvariant);
 				if (md.Success)
 				{
-					to = ToLegalAprsCallsign(md.Groups[1].Value);
+					string cand = ToLegalAprsCallsign(md.Groups[1].Value);
+					if (Regex.IsMatch(cand, "^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$"))
+						to = cand;
 					break;
 				}
 			}
 
-			if (!string.IsNullOrEmpty(to))
-			{
-				if (!Regex.IsMatch(to, "^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$"))
-					to = null;
-			}
-			return !string.IsNullOrEmpty(text);
+			return true;
 		}
 
         private static string ExtractFirstString(string json, string pattern)
@@ -464,51 +495,61 @@ namespace APRSForwarder
             return "-" + two;
         }
 
-        private void HandlePublish(string msg, string topic)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(msg)) return;
+		private void HandlePublish(string msg, string topic)
+		{
+			try
+			{
+				if (string.IsNullOrEmpty(msg)) return;
 
-				string callsign = ExtractSenderFromJson (msg); // ExtractCallsignFromJson(msg);
-				/* if (string.IsNullOrEmpty(callsign))
-				{
-					string snd = ExtractSenderFromJson(msg);
-					callsign = !string.IsNullOrEmpty(snd) ? snd : (_nodePrefix + SafeSuffixFromJson(msg));
-				}
+				string callsign = ExtractSenderFromJson(msg);
+				/* if (IsNullOrWhiteSpace(callsign)) callsign = ExtractCallsignFromJson(msg);
+				if (IsNullOrWhiteSpace(callsign)) callsign = _nodePrefix + SafeSuffixFromJson(msg);
 				callsign = ToLegalAprsCallsign(callsign); */
 
-				string _comment_all = "";
-
-				string nName, nFw, nHw;
-				if (TryExtractNodeInfoFromJson(msg, out nName, out nFw, out nHw))
+				string nName, nFw, nHw, nModel;
+				if (TryExtractNodeInfoFromJson(msg, out nName, out nFw, out nHw, out nModel))
 				{
 					string ch = ChannelFromTopic(topic);
-					string info = "Node:" + (nName ?? "-");
-					if (!string.IsNullOrEmpty(nFw)) info += " FW:" + nFw;
-					if (!string.IsNullOrEmpty(nHw)) info += " HW:" + nHw;
-					if (!string.IsNullOrEmpty(ch))  info += " Ch:" + ch;
+					NodeInfo ni;
+					if (!_infoCache.TryGetValue(callsign, out ni)) ni = new NodeInfo();
+					if (!IsNullOrWhiteSpace(nName))  ni.Name  = nName;
+					if (!IsNullOrWhiteSpace(nFw))    ni.Fw    = nFw;
+					if (!IsNullOrWhiteSpace(nHw))    ni.Hw    = nHw;
+					if (!IsNullOrWhiteSpace(nModel)) ni.Model = nModel;
+					if (!IsNullOrWhiteSpace(ch))     ni.Chan  = ch;
+					ni.Ts = DateTime.UtcNow;
+					_infoCache[callsign] = ni;
+				}
 
-					_comment_all += " "+ info;
+				string tmsg, dest;
+				if (TryExtractTextFromJson(msg, out tmsg, out dest))
+				{
+					NodeText nt;
+					if (!_textCache.TryGetValue(callsign, out nt)) nt = new NodeText();
+					nt.Text = tmsg;
+					nt.To   = dest;
+					nt.Ts   = DateTime.UtcNow;
+					_textCache[callsign] = nt;
 				}
 
 				string battPct, volt, tempC, humPct, pressHPa, rssi, snr, airUtil;
 				bool hasTel = TryExtractTelemetryFromJson(msg, out battPct, out volt, out tempC, out humPct, out pressHPa, out rssi, out snr, out airUtil);
+
 				StringBuilder tel = new StringBuilder();
 				if (hasTel)
 				{
-					if (!string.IsNullOrEmpty(battPct)) tel.Append("Batt ").Append(battPct).Append(" ");
-					if (!string.IsNullOrEmpty(volt))    tel.Append("V").Append(volt).Append(" ");
-					if (!string.IsNullOrEmpty(tempC))   tel.Append("T").Append(tempC).Append(" ");
-					if (!string.IsNullOrEmpty(humPct))  tel.Append("H").Append(humPct).Append(" ");
-					if (!string.IsNullOrEmpty(pressHPa))tel.Append("P").Append(pressHPa).Append(" ");
-					if (!string.IsNullOrEmpty(snr))     tel.Append("SNR").Append(snr).Append(" ");
-					if (!string.IsNullOrEmpty(rssi))    tel.Append("RSSI").Append(rssi).Append(" ");
-					if (!string.IsNullOrEmpty(airUtil)) tel.Append("Air").Append(airUtil).Append(" ");
+					if (!IsNullOrWhiteSpace(battPct)) tel.Append("Batt ").Append(battPct).Append(" ");
+					if (!IsNullOrWhiteSpace(volt))    tel.Append("V").Append(volt).Append(" ");
+					if (!IsNullOrWhiteSpace(tempC))   tel.Append("T").Append(tempC).Append(" ");
+					if (!IsNullOrWhiteSpace(humPct))  tel.Append("H").Append(humPct).Append(" ");
+					if (!IsNullOrWhiteSpace(pressHPa))tel.Append("P").Append(pressHPa).Append(" ");
+					if (!IsNullOrWhiteSpace(snr))     tel.Append("SNR").Append(snr).Append(" ");
+					if (!IsNullOrWhiteSpace(rssi))    tel.Append("RSSI").Append(rssi).Append(" ");
+					if (!IsNullOrWhiteSpace(airUtil)) tel.Append("Air").Append(airUtil).Append(" ");
 				}
-
 				string telSnippet = tel.ToString().Trim();
-				if (!string.IsNullOrEmpty(telSnippet))
+
+				if (!IsNullOrWhiteSpace(telSnippet))
 				{
 					NodeTel t;
 					if (!_telCache.TryGetValue(callsign, out t)) t = new NodeTel();
@@ -530,7 +571,7 @@ namespace APRSForwarder
 				}
 
 				string telToUse = telSnippet;
-				if (string.IsNullOrEmpty(telToUse))
+				if (IsNullOrWhiteSpace(telToUse))
 				{
 					NodeTel cachedTel;
 					if (_telCache.TryGetValue(callsign, out cachedTel) &&
@@ -542,53 +583,78 @@ namespace APRSForwarder
 
 				string posComment = "";
 				if (alt.HasValue) posComment = BuildComment(null, alt, "");
-				if (!string.IsNullOrEmpty(telToUse))
+
+				if (!IsNullOrWhiteSpace(telToUse))
 				{
 					if (!IsNullOrWhiteSpace(posComment)) posComment += " ";
 					posComment += telToUse;
-					if (posComment.Length > 70) posComment = posComment.Substring(0, 70);
 				}
 
-				if (!IsNullOrWhiteSpace(posComment)) _comment_all += " " + posComment;
-
-				string tmsg, dest;
-				if (TryExtractTextFromJson(msg, out tmsg, out dest))
+				NodeInfo cachedInfo;
+				if (_infoCache.TryGetValue(callsign, out cachedInfo) &&
+					(DateTime.UtcNow - cachedInfo.Ts) <= _infoFresh)
 				{
-					_comment_all += " "+ dest +" "+ tmsg;
+					StringBuilder brief = new StringBuilder();
+					if (!IsNullOrWhiteSpace(cachedInfo.Name)) brief.Append("Node:").Append(SanitizeAscii(cachedInfo.Name, 18)).Append(' ');
+					if (!IsNullOrWhiteSpace(cachedInfo.Chan)) brief.Append("Ch:").Append(SanitizeAscii(cachedInfo.Chan, 10)).Append(' ');
+					string briefStr = brief.ToString().Trim();
+					if (!IsNullOrWhiteSpace(briefStr))
+					{
+						if (!IsNullOrWhiteSpace(posComment)) posComment += " ";
+						posComment += briefStr;
+					}
 				}
+
+				NodeText cachedText;
+				if (_textCache.TryGetValue(callsign, out cachedText) &&
+					(DateTime.UtcNow - cachedText.Ts) <= _textFresh &&
+					!IsNullOrWhiteSpace(cachedText.Text))
+				{
+					string tShort = SanitizeAscii(cachedText.Text, 30);
+					if (!IsNullOrWhiteSpace(tShort))
+					{
+						if (!IsNullOrWhiteSpace(posComment)) posComment += " ";
+						posComment += "Msg " + tShort;
+					}
+				}
+
+				if (posComment.Length > 70) posComment = posComment.Substring(0, 70);
 
 				bool sendPos = gotPosNow;
-				NodePos posCached;
-
-				if (!sendPos &&
-					_posCache.TryGetValue(callsign, out posCached) &&
-					(DateTime.UtcNow - posCached.Ts) <= _posFresh)
+				if (!sendPos)
 				{
-					lat = posCached.Lat; lon = posCached.Lon; alt = posCached.Alt;
-					sendPos = true;
+					NodePos posCached;
+					if (_posCache.TryGetValue(callsign, out posCached) &&
+						(DateTime.UtcNow - posCached.Ts) <= _posFresh)
+					{
+						lat = posCached.Lat; lon = posCached.Lon; alt = posCached.Alt;
+						sendPos = true;
+					}
 				}
 
 				if (sendPos)
 				{
-					string commentOut = (_comment_all + " " + _commentSuffix).Trim();
+					string commentOut = (posComment + " " + _commentSuffix).Trim();
 					string line = BuildAprsPositionLine(callsign, lat, lon, _symbol, commentOut);
-					Console.WriteLine("[MQTT] " + line);
+					Console.WriteLine("[MQTT] DATA " + line);
 					_gw.TCPSend("ignored", 0, line);
 				}
 				else
 				{
-					if (!IsNullOrWhiteSpace(_comment_all))
+					string statusBody = (posComment + " " + _commentSuffix).Trim();
+					if (!IsNullOrWhiteSpace(statusBody))
 					{
-						string status = BuildAprsStatusLine(callsign, SanitizeAscii((_comment_all + " " + _commentSuffix).Trim(), 67));
-						Console.WriteLine("[MQTT] " + status);
+						string status = BuildAprsStatusLine(callsign, SanitizeAscii(statusBody, 67));
+						Console.WriteLine("[MQTT] STATUS " + status);
 						_gw.TCPSend("ignored", 0, status);
 					}
 				}
-            }
-            catch (Exception ex)
-            {
-            }
-        }
+			}
+			catch (Exception ex)
+			{
+			}
+		}
+
 
         private struct Packet { public byte Type; public byte[] Payload; }
 

@@ -71,12 +71,13 @@ namespace APRSForwarder
 				string user = file.Read("mqtt_user", "MeshGateway");
 				string pass = file.Read("mqtt_pass", "MeshGateway");
 				string topic= file.Read("mqtt_topic", "MeshGateway");
-				int ka      = Int32.Parse(file.Read("keepalive_secs", "MeshGateway"));
+				int ka      = Int32.Parse(file.Read("keepalive", "MeshGateway"));
 				string pref = file.Read("node_callsign_prefix", "MeshGateway");
 				string sym  = file.Read("default_symbol", "MeshGateway");
 				string cmt  = file.Read("comment_suffix", "MeshGateway");
+				int ts      = Int32.Parse(file.Read("threadsleep", "MeshGateway"));
 
-				_meshBridge = new MeshMqttBridge(this, host, mport, tls, tlsIgn, user, pass, topic, ka, pref, sym, cmt);
+				_meshBridge = new MeshMqttBridge(this, host, mport, tls, tlsIgn, user, pass, topic, ka, pref, sym, cmt, ts);
 				_meshBridge.Start();
 			}
 			/* MeshMqttBridge */
