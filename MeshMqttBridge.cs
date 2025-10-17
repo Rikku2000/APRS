@@ -23,7 +23,6 @@ namespace APRSForwarder
         private readonly string _pass;
         private readonly string _topic;
         private readonly int _keepAlive;
-        private readonly int _threadSleep;
 
         private readonly string _nodePrefix;
         private readonly string _symbol;
@@ -53,7 +52,7 @@ namespace APRSForwarder
             bool useTls, bool tlsIgnoreErrors,
             string user, string pass,
             string topic, int keepAlive,
-            string nodePrefix, string symbol, string commentSuffix, int threadSleep)
+            string nodePrefix, string symbol, string commentSuffix)
         {
             _gw = gw;
             _host = IsNullOrWhiteSpace(host) ? "mqtt.meshtastic.org" : host;
@@ -67,7 +66,6 @@ namespace APRSForwarder
             _nodePrefix = IsNullOrWhiteSpace(nodePrefix) ? "MT0XYZ" : nodePrefix;
             _symbol = IsNullOrWhiteSpace(symbol) ? "/[" : symbol;
             _commentSuffix = IsNullOrWhiteSpace(commentSuffix) ? "via Meshtastic" : commentSuffix;
-            _threadSleep = (threadSleep > 0) ? threadSleep : 3000;
         }
 
         public void Start()
@@ -184,7 +182,7 @@ namespace APRSForwarder
                 {
                 }
 
-                if (_running) Thread.Sleep(_threadSleep);
+                if (_running) Thread.Sleep(3000);
             }
         }
 
