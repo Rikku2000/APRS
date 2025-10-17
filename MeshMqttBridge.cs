@@ -31,6 +31,15 @@ namespace APRSForwarder
         private Thread _thr;
         private volatile bool _running;
 
+		private class NodePos { public double Lat; public double Lon; public int? Alt; public DateTime Ts; }
+		private class NodeTel { public string Snippet; public DateTime Ts; }
+
+		private Dictionary<string, NodePos> _posCache = new Dictionary<string, NodePos>();
+		private Dictionary<string, NodeTel> _telCache = new Dictionary<string, NodeTel>();
+
+		private readonly TimeSpan _posFresh = TimeSpan.FromMinutes(15);
+		private readonly TimeSpan _telFresh = TimeSpan.FromMinutes(10);
+
         public MeshMqttBridge(
             APRSGateWay gw,
             string host, int port,
@@ -461,10 +470,13 @@ namespace APRSForwarder
             {
                 if (string.IsNullOrEmpty(msg)) return;
 
-				string callsign = ExtractCallsignFromJson(msg);
-				if (string.IsNullOrEmpty(callsign)) callsign = _nodePrefix + SafeSuffixFromJson(msg);
-
-                callsign = ExtractSenderFromJson (msg); // ToLegalAprsCallsign(callsign);
+				string callsign = ExtractSenderFromJson (msg); // ExtractCallsignFromJson(msg);
+				/* if (string.IsNullOrEmpty(callsign))
+				{
+					string snd = ExtractSenderFromJson(msg);
+					callsign = !string.IsNullOrEmpty(snd) ? snd : (_nodePrefix + SafeSuffixFromJson(msg));
+				}
+				callsign = ToLegalAprsCallsign(callsign); */
 
 				string _comment_all = "";
 
@@ -496,26 +508,48 @@ namespace APRSForwarder
 				}
 
 				string telSnippet = tel.ToString().Trim();
-				double lat, lon;
-				int? alt;
-				if (TryExtractPositionFromJson(msg, out lat, out lon, out alt))
+				if (!string.IsNullOrEmpty(telSnippet))
 				{
-					string comment = BuildComment(null, alt, "");
-					if (!string.IsNullOrEmpty(telSnippet))
-					{
-						string merged = comment;
-						if (!IsNullOrWhiteSpace(merged)) merged += " ";
-						merged += telSnippet;
-						if (merged.Length > 70) merged = merged.Substring(0, 70);
-						comment = merged;
-					}
+					NodeTel t;
+					if (!_telCache.TryGetValue(callsign, out t)) t = new NodeTel();
+					t.Snippet = telSnippet;
+					t.Ts = DateTime.UtcNow;
+					_telCache[callsign] = t;
+				}
 
-					_comment_all += " "+ comment;
-				}
-				else if (!string.IsNullOrEmpty(telSnippet))
+				double lat = 0.0, lon = 0.0;
+				int? alt = null;
+				bool gotPosNow = TryExtractPositionFromJson(msg, out lat, out lon, out alt);
+
+				if (gotPosNow)
 				{
-					_comment_all += " "+ SanitizeAscii(telSnippet, 67);
+					NodePos p;
+					if (!_posCache.TryGetValue(callsign, out p)) p = new NodePos();
+					p.Lat = lat; p.Lon = lon; p.Alt = alt; p.Ts = DateTime.UtcNow;
+					_posCache[callsign] = p;
 				}
+
+				string telToUse = telSnippet;
+				if (string.IsNullOrEmpty(telToUse))
+				{
+					NodeTel cachedTel;
+					if (_telCache.TryGetValue(callsign, out cachedTel) &&
+						(DateTime.UtcNow - cachedTel.Ts) <= _telFresh)
+					{
+						telToUse = cachedTel.Snippet;
+					}
+				}
+
+				string posComment = "";
+				if (alt.HasValue) posComment = BuildComment(null, alt, "");
+				if (!string.IsNullOrEmpty(telToUse))
+				{
+					if (!IsNullOrWhiteSpace(posComment)) posComment += " ";
+					posComment += telToUse;
+					if (posComment.Length > 70) posComment = posComment.Substring(0, 70);
+				}
+
+				if (!IsNullOrWhiteSpace(posComment)) _comment_all += " " + posComment;
 
 				string tmsg, dest;
 				if (TryExtractTextFromJson(msg, out tmsg, out dest))
@@ -523,10 +557,33 @@ namespace APRSForwarder
 					_comment_all += " "+ dest +" "+ tmsg;
 				}
 
-				string line = BuildAprsPositionLine(callsign, lat, lon, _symbol, _comment_all +" "+ _commentSuffix);
-				string prev = _comment_all.Length > 255 ? _comment_all.Substring(0, 255) + "..." : _comment_all;
-				Console.WriteLine("[MQTT] "+ msg +" "+ prev);
-				_gw.TCPSend("ignored", 0, line);
+				bool sendPos = gotPosNow;
+				NodePos posCached;
+
+				if (!sendPos &&
+					_posCache.TryGetValue(callsign, out posCached) &&
+					(DateTime.UtcNow - posCached.Ts) <= _posFresh)
+				{
+					lat = posCached.Lat; lon = posCached.Lon; alt = posCached.Alt;
+					sendPos = true;
+				}
+
+				if (sendPos)
+				{
+					string commentOut = (_comment_all + " " + _commentSuffix).Trim();
+					string line = BuildAprsPositionLine(callsign, lat, lon, _symbol, commentOut);
+					Console.WriteLine("[MQTT] " + line);
+					_gw.TCPSend("ignored", 0, line);
+				}
+				else
+				{
+					if (!IsNullOrWhiteSpace(_comment_all))
+					{
+						string status = BuildAprsStatusLine(callsign, SanitizeAscii((_comment_all + " " + _commentSuffix).Trim(), 67));
+						Console.WriteLine("[MQTT] " + status);
+						_gw.TCPSend("ignored", 0, status);
+					}
+				}
             }
             catch (Exception ex)
             {
