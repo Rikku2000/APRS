@@ -53,6 +53,10 @@ namespace APRSForwarder
 		private Dump1090Bridge _d1090;
 		private bool _d1090Enabled = false;
 		/* Dump1090Bridge */
+		/* VesselFinderBridge */
+		private VesselFinderBridge _vfBridge;
+		private bool _vfEnabled = false;
+		/* VesselFinderBridge */
 
         public APRSGateWay()
 		{
@@ -126,6 +130,23 @@ namespace APRSForwarder
 			}
 			/* Dump1090Bridge */
 
+			/* VesselFinderBridge */
+			_vfEnabled = string.Equals(file.Read("enabled", "VesselFinder") ?? "false", "true", StringComparison.OrdinalIgnoreCase);
+			if (_vfEnabled)
+			{
+				string jurl = file.Read("json_url", "VesselFinder");
+				int poll = 10; int.TryParse(file.Read("poll_secs", "VesselFinder"), out poll);
+
+				string sym  = file.Read("default_symbol", "VesselFinder");
+				string cmt  = file.Read("comment_suffix", "VesselFinder");
+				string pref = file.Read("node_callsign_prefix", "VesselFinder");
+				int minTx = 30; int.TryParse(file.Read("min_tx_interval_secs", "VesselFinder"), out minTx);
+
+				_vfBridge = new VesselFinderBridge(this, jurl, poll, sym, cmt, pref, minTx);
+				_vfBridge.Start();
+			}
+			/* VesselFinderBridge */
+
             if (_active) return;
             lock (timeoutedCmdList) timeoutedCmdList.Clear();
             _active = true;
@@ -152,6 +173,9 @@ namespace APRSForwarder
 			/* Dump1090Bridge */
 			if (_d1090 != null) { try { _d1090.Stop(); } catch { } _d1090 = null; }
 			/* Dump1090Bridge */
+			/* VesselFinderBridge */
+			if (_vfBridge != null) { try { _vfBridge.Stop(); } catch { } _vfBridge = null; }
+			/* VesselFinderBridge */
 
             if (tcp_in_client != null)
             {

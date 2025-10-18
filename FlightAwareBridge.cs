@@ -62,7 +62,7 @@ namespace APRSForwarder
             {
                 try
                 {
-                    string json = HttpGet(_url, 8000);
+                    string json = HttpGetCompat(_url, 8000);
                     if (!string.IsNullOrEmpty(json))
                         HandleAircraftJson(json);
                 }
@@ -89,6 +89,67 @@ namespace APRSForwarder
                 return sr.ReadToEnd();
             }
         }
+
+		private static string HttpGetCompat(string url, int timeoutMs)
+		{
+			if (url != null && url.Length >= 6 &&
+				(url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+			{
+				try
+				{
+					Type t = Type.GetTypeFromProgID("WinHttp.WinHttpRequest.5.1");
+					if (t == null)
+					{
+						Console.WriteLine("[HTTPS] WinHTTP not available on this system.");
+						return null;
+					}
+
+					object req = Activator.CreateInstance(t);
+
+					t.InvokeMember("SetProxy",
+						System.Reflection.BindingFlags.InvokeMethod, null, req,
+						new object[] { 1 });
+
+					t.InvokeMember("Open",
+						System.Reflection.BindingFlags.InvokeMethod, null, req,
+						new object[] { "GET", url, false });
+
+					t.InvokeMember("SetTimeouts",
+						System.Reflection.BindingFlags.InvokeMethod, null, req,
+						new object[] { timeoutMs, timeoutMs, timeoutMs, timeoutMs });
+
+					t.InvokeMember("SetRequestHeader",
+						System.Reflection.BindingFlags.InvokeMethod, null, req,
+						new object[] { "User-Agent", "APRS-HTTPS-Bridge/1.0" });
+
+					t.InvokeMember("Send",
+						System.Reflection.BindingFlags.InvokeMethod, null, req, null);
+
+					object statusObj = t.InvokeMember("Status",
+						System.Reflection.BindingFlags.GetProperty, null, req, null);
+					int status = (statusObj is int) ? (int)statusObj : 0;
+
+					if (status < 200 || status >= 300)
+					{
+						object stxt = t.InvokeMember("StatusText",
+							System.Reflection.BindingFlags.GetProperty, null, req, null);
+						Console.WriteLine("[HTTPS] HTTP " + status.ToString() + " " + (stxt ?? ""));
+						return null;
+					}
+
+					object respText = t.InvokeMember("ResponseText",
+						System.Reflection.BindingFlags.GetProperty, null, req, null);
+					return (respText == null) ? null : (string)respText;
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine("[HTTPS] " + ex.Message);
+					return null;
+				}
+			}
+
+			return HttpGet(url, timeoutMs);
+		}
 
         private void HandleAircraftJson(string json)
         {

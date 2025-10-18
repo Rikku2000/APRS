@@ -48,6 +48,9 @@
     <Compile Include="IniFile.cs" />
     <Compile Include="APRSGateWay.cs" />
     <Compile Include="MeshMqttBridge.cs" />
+    <Compile Include="FlightAwareBridge.cs" />
+    <Compile Include="Dump1090Bridge.cs" />
+    <Compile Include="VesselFinderBridge.cs" />
     <Compile Include="AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
