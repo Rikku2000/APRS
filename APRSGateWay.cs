@@ -45,6 +45,14 @@ namespace APRSForwarder
 		private MeshMqttBridge _meshBridge;
 		private bool _meshEnabled = false;
 		/* MeshMqttBridge */
+		/* FlightAwareBridge */
+		private FlightAwareBridge _faBridge;
+		private bool _faEnabled = false;
+		/* FlightAwareBridge */
+		/* Dump1090Bridge */
+		private Dump1090Bridge _d1090;
+		private bool _d1090Enabled = false;
+		/* Dump1090Bridge */
 
         public APRSGateWay()
 		{
@@ -82,6 +90,42 @@ namespace APRSForwarder
 			}
 			/* MeshMqttBridge */
 
+			/* FlightAware */
+			_faEnabled = string.Equals(file.Read("enabled", "FlightAware") ?? "false", "true", StringComparison.OrdinalIgnoreCase);
+			if (_faEnabled)
+			{
+				string url  = file.Read("aircraft_url", "FlightAware");
+				int poll    = 5;
+				int.TryParse(file.Read("poll_secs", "FlightAware"), out poll);
+				string sym  = file.Read("default_symbol", "FlightAware");
+				string cmt  = file.Read("comment_suffix", "FlightAware");
+				string pref = file.Read("node_callsign_prefix", "FlightAware");
+
+				_faBridge = new FlightAwareBridge(this, url, poll, sym, cmt, pref);
+				_faBridge.Start();
+			}
+			/* FlightAware */
+
+			/* Dump1090Bridge */
+			_d1090Enabled = string.Equals(file.Read("enabled", "Dump1090") ?? "false", "true", StringComparison.OrdinalIgnoreCase);
+			if (_d1090Enabled)
+			{
+				string jurl = file.Read("json_url", "Dump1090");
+				int poll = 5; int.TryParse(file.Read("poll_secs", "Dump1090"), out poll);
+
+				string sbsHost = file.Read("sbs_host", "Dump1090");
+				int sbsPort = 30003; int.TryParse(file.Read("sbs_port", "Dump1090"), out sbsPort);
+
+				string sym  = file.Read("default_symbol", "Dump1090");
+				string cmt  = file.Read("comment_suffix", "Dump1090");
+				string pref = file.Read("node_callsign_prefix", "Dump1090");
+				int minTx = 15; int.TryParse(file.Read("min_tx_interval_secs", "Dump1090"), out minTx);
+
+				_d1090 = new Dump1090Bridge(this, jurl, poll, sbsHost, sbsPort, sym, cmt, pref, minTx);
+				_d1090.Start();
+			}
+			/* Dump1090Bridge */
+
             if (_active) return;
             lock (timeoutedCmdList) timeoutedCmdList.Clear();
             _active = true;
@@ -102,6 +146,12 @@ namespace APRSForwarder
 			/* MeshMqttBridge */
 			if (_meshBridge != null) { try { _meshBridge.Stop(); } catch { } _meshBridge = null; }
 			/* MeshMqttBridge */
+			/* FlightAware */
+			if (_faBridge != null) { try { _faBridge.Stop(); } catch { } _faBridge = null; }
+			/* FlightAware */
+			/* Dump1090Bridge */
+			if (_d1090 != null) { try { _d1090.Stop(); } catch { } _d1090 = null; }
+			/* Dump1090Bridge */
 
             if (tcp_in_client != null)
             {

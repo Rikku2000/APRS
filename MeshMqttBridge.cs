@@ -645,7 +645,6 @@ namespace APRSForwarder
 					{
 						string status = BuildAprsStatusLine(callsign, SanitizeAscii(statusBody, 67));
 						Console.WriteLine("[MQTT] STATUS " + status);
-						_gw.TCPSend("ignored", 0, status);
 					}
 				}
 			}
