@@ -264,13 +264,22 @@ namespace APRSWebServer
 
             public void SetAPRSNoDate()
             {
+				double alat = Math.Abs(lat);
+				double alon = Math.Abs(lon);
+
+				string latDeg = Math.Truncate(alat).ToString("00");
+				string latMin = ((alat - Math.Truncate(alat)) * 60).ToString("00.00").Replace(",", ".");
+				char latHem = lat >= 0 ? 'N' : 'S';
+
+				string lonDeg = Math.Truncate(alon).ToString("000");
+				string lonMin = ((alon - Math.Truncate(alon)) * 60).ToString("00.00").Replace(",", ".");
+				char lonHem = lon >= 0 ? 'E' : 'W';
+
                 APRS =
                     name + ">APRS,TCPIP*" + qConstruct + ":=" +
-                    Math.Truncate(lat).ToString("00") + ((lat - Math.Truncate(lat)) * 60).ToString("00.00").Replace(",", ".") +
-                    (lat > 0 ? "N" : "S") +
+                    latDeg + latMin + latHem +
                     iconSymbol[0] +
-                    Math.Truncate(lon).ToString("000") + ((lon - Math.Truncate(lon)) * 60).ToString("00.00").Replace(",", ".") +
-                    (lon > 0 ? "E" : "W") +
+                    lonDeg + lonMin + lonHem +
                     iconSymbol[1] +
                     course.ToString("000") + "/" + Math.Truncate(speed / 1.852).ToString("000") +
                     ((this.Comment != null) && (this.Comment != String.Empty) ? " " + this.Comment : "") +
@@ -280,6 +289,17 @@ namespace APRSWebServer
 
             public void SetAPRSWithDate()
             {
+				double alat = Math.Abs(lat);
+				double alon = Math.Abs(lon);
+
+				string latDeg = Math.Truncate(alat).ToString("00");
+				string latMin = ((alat - Math.Truncate(alat)) * 60).ToString("00.00").Replace(",", ".");
+				char latHem = lat >= 0 ? 'N' : 'S';
+
+				string lonDeg = Math.Truncate(alon).ToString("000");
+				string lonMin = ((alon - Math.Truncate(alon)) * 60).ToString("00.00").Replace(",", ".");
+				char lonHem = lon >= 0 ? 'E' : 'W';
+
                 APRS =
                     name + ">APRS,TCPIP*" + qConstruct + ":@";
                 if (DateTime.UtcNow.Subtract(this.last).TotalHours <= 23.5)
@@ -287,11 +307,9 @@ namespace APRSWebServer
                 else
                     APRS += this.last.ToString("ddHHmm") + "z";
                 APRS +=
-                    Math.Truncate(lat).ToString("00") + ((lat - Math.Truncate(lat)) * 60).ToString("00.00").Replace(",", ".") +
-                    (lat > 0 ? "N" : "S") +
+                    latDeg + latMin + latHem +
                     iconSymbol[0] +
-                    Math.Truncate(lon).ToString("000") + ((lon - Math.Truncate(lon)) * 60).ToString("00.00").Replace(",", ".") +
-                    (lon > 0 ? "E" : "W") +
+                    lonDeg + lonMin + lonHem +
                     iconSymbol[1] +
                     course.ToString("000") + "/" + Math.Truncate(speed / 1.852).ToString("000") +
                     ((this.Comment != null) && (this.Comment != String.Empty) ? " " + this.Comment : "") +
