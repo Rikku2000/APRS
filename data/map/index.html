@@ -1,4 +1,4 @@
-﻿<!DOCTYPE HTML>
+<!DOCTYPE HTML>
 	<html lang="en-US">
 		<head>
 			<title>APRS-Server</title>
@@ -143,7 +143,7 @@
 					for(i=0;i<marker_cache.length;i++)
 						marker_cache[i].marker.closePopup();
 
-					for(i=0;i<marker_cache.length;i++) {	
+					for(i=0;i<marker_cache.length;i++) {
 						if(marker_cache[i].user == user) {
 							var mc = marker_cache[i];
 							txt = '<table style="width:260px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:260px;">' + txt;	
@@ -172,7 +172,7 @@
 							};
 
 							if(mc.heading != heading)
-								$("#img"+id).css({'-webkit-transform' : 'rotate('+ mc.heading +'deg)','-moz-transform' : 'rotate('+ mc.heading +'deg)','-ms-transform' : 'rotate('+ mc.heading +'deg)','transform' : 'rotate('+ mc.heading +'deg)'});
+								$("#img"+id).css({'-webkit-transform' : 'rotate('+ heading +'deg)','-moz-transform' : 'rotate('+ heading +'deg)','-ms-transform' : 'rotate('+ heading +'deg)','transform' : 'rotate('+ heading +'deg)'});
 
 							mc.symbol = symbol; mc.heading = heading; mc.speed = speed; mc.dt = dt;
 							mc.marker.bindPopup(txt);
@@ -186,6 +186,11 @@
 								mc.line = new L.Polyline(mc.llarray,{color:mc.color,weight:3});
 								mc.line.addTo(map);
 							};
+
+							marker_cache.splice(i, 1);
+							marker_cache.push(mc);
+
+							UpdateStatus();
 
 							return;
 						};
