@@ -96,6 +96,7 @@ namespace APRSForwarder
                     using (TcpClient tcp = new TcpClient())
                     {
                         tcp.Connect(_host, _port);
+						try { tcp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true); } catch { }
 
                         Stream netStream = tcp.GetStream();
                         if (_useTls)
@@ -494,16 +495,44 @@ namespace APRSForwarder
             return "-" + two;
         }
 
+		private readonly Dictionary<string,string> _idToName = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+
 		private void HandlePublish(string msg, string topic)
 		{
 			try
 			{
 				if (string.IsNullOrEmpty(msg)) return;
 
-				string callsign = ExtractSenderFromJson(msg);
-				/* if (IsNullOrWhiteSpace(callsign)) callsign = ExtractCallsignFromJson(msg);
-				if (IsNullOrWhiteSpace(callsign)) callsign = _nodePrefix + SafeSuffixFromJson(msg);
-				callsign = ToLegalAprsCallsign(callsign); */
+                string callsign = ExtractSenderFromJson(msg);
+                string stableId  = ExtractFirstString(msg, "\"id\"\\s*:\\s*\"([^\"]+)\"");
+                string longName  = ExtractLongNameFromJson(msg);
+                string shortName = ExtractShortNameFromJson(msg);
+
+                string pretty = null;
+                if (!IsNullOrWhiteSpace(longName))       pretty = longName; // ToLegalAprsCallsign(longName);
+                else if (!IsNullOrWhiteSpace(shortName)) pretty = shortName; // ToLegalAprsCallsign(shortName);
+
+                if (!IsNullOrWhiteSpace(pretty) && pretty.IndexOf('-') < 0 && !IsNullOrWhiteSpace(stableId))
+                    pretty = pretty + SafeSuffixFromJson(msg);
+
+                if (!IsNullOrWhiteSpace(stableId) && !IsNullOrWhiteSpace(pretty))
+                    _idToName[stableId] = pretty;
+
+                if (!IsNullOrWhiteSpace(pretty))
+                {
+                    callsign = pretty;
+                }
+                else if (!IsNullOrWhiteSpace(stableId))
+                {
+                    string mappedName;
+                    if (_idToName.TryGetValue(stableId, out mappedName) && !IsNullOrWhiteSpace(mappedName))
+                        callsign = mappedName;
+                    else if (IsNullOrWhiteSpace(callsign))
+                        callsign = stableId;
+                }
+
+                /* if (!IsNullOrWhiteSpace(callsign))
+                    callsign = ToLegalAprsCallsign(callsign); */
 
 				string nName, nFw, nHw, nModel;
 				if (TryExtractNodeInfoFromJson(msg, out nName, out nFw, out nHw, out nModel))

@@ -203,22 +203,26 @@ namespace APRSForwarder
             EmitAprs(ident, lat, lon, alt, spd, trk, vr, squawk, emerg);
         }
 
-        private void RunSbs()
-        {
-            while (_running)
-            {
-                try
-                {
-                    using (TcpClient tcp = new TcpClient())
-                    {
-                        tcp.Connect(_sbsHost, _sbsPort);
-                        Console.WriteLine("[DUMP1090] SBS connected");
-                        using (NetworkStream ns = tcp.GetStream())
-                        using (StreamReader sr = new StreamReader(ns))
-                        {
-                            string line;
-                            while (_running && (line = sr.ReadLine()) != null)
-                            {
+		private void RunSbs()
+		{
+			int backoffMs = 2000;
+			while (_running)
+			{
+				try
+				{
+					using (TcpClient tcp = new TcpClient())
+					{
+						tcp.Connect(_sbsHost, _sbsPort);
+						try { tcp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true); } catch { }
+						Console.WriteLine("[DUMP1090] SBS connected");
+
+						using (NetworkStream ns = tcp.GetStream())
+						using (StreamReader sr = new StreamReader(ns))
+						{
+							tcp.ReceiveTimeout = 30000;
+							string line;
+							while (_running && (line = sr.ReadLine()) != null)
+							{
                                 string[] f = line.Split(',');
                                 if (f.Length < 22) continue;
                                 if (!string.Equals(f[0], "MSG", StringComparison.OrdinalIgnoreCase)) continue;
@@ -239,17 +243,27 @@ namespace APRSForwarder
                                 double.TryParse(f[13], NumberStyles.Float, CultureInfo.InvariantCulture, out trk);
 
                                 EmitAprs(ident, lat, lon, alt, spd, trk, vr, null, false);
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("[DUMP1090] " + ex.Message);
-                }
-                if (_running) Thread.Sleep(2000);
-            }
-        }
+							}
+						}
+					}
+
+					backoffMs = 2000;
+				}
+				catch (IOException)
+				{
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine("[DUMP1090] " + ex.Message);
+				}
+
+				if (_running)
+				{
+					Thread.Sleep(backoffMs);
+					backoffMs = Math.Min(backoffMs * 2, 30000);
+				}
+			}
+		}
 
         private void EmitAprs(string ident, double lat, double lon, int altFt, double spdKt, double trkDeg, int vrFpm, string squawk, bool emergency)
         {

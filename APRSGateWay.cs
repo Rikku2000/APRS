@@ -29,6 +29,7 @@ namespace APRSForwarder
         private Hashtable timeoutedCmdList = new Hashtable();
         private string _state = "idle";
         private bool _active = false;
+		private int _reconnectDelayMs = 5000;
 
         public string State
         {
@@ -223,6 +224,7 @@ namespace APRSForwarder
                 if ((tcp_in_client == null) || (!IsConnected(tcp_in_client)))
                 {
                     tcp_in_client = new TcpClient();
+					try { tcp_in_client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true); } catch { }
                     try
                     {
                         _state = "connecting";
@@ -233,18 +235,19 @@ namespace APRSForwarder
                         incomingMessagesCounter = 0;
                         _state = "Connected";
                         lastIncDT = DateTime.UtcNow;
+						_reconnectDelayMs = 5000;
                     }
                     catch
                     {
-                        _state = "disconnected";
-                        tcp_in_client.Close();
-                        tcp_in_client = new TcpClient();
-                        Thread.Sleep(5000);
-                        continue;
+						try { tcp_in_client.Close(); } catch {}
+						tcp_in_client = null;
+						Thread.Sleep(_reconnectDelayMs);
+						if (_reconnectDelayMs < 60000) _reconnectDelayMs = Math.Min(60000, _reconnectDelayMs * 2);
+							continue;
                     };
                 };
 
-                if (DateTime.UtcNow.Subtract(lastIncDT).TotalMinutes > 3)
+                if (DateTime.UtcNow.Subtract(lastIncDT).TotalMinutes > 1)
                 {
                     try
                     {
@@ -253,7 +256,10 @@ namespace APRSForwarder
                         tcp_in_client.GetStream().Write(arr, 0, arr.Length);
                         lastIncDT = DateTime.UtcNow;
                     }
-                    catch { continue; };
+                    catch
+                    {
+						if (tcp_in_client != null && IsConnected(tcp_in_client)) { continue; }
+                    };
                 };                
 
                 try
@@ -272,10 +278,15 @@ namespace APRSForwarder
                 }
                 catch
                 {
-                    tcp_in_client.Close();
-                    tcp_in_client = new TcpClient();
-                    Thread.Sleep(5000);
-                    continue;
+					if (tcp_in_client != null && IsConnected(tcp_in_client))
+					{
+						continue;
+					}
+					try { tcp_in_client.Close(); } catch {}
+					tcp_in_client = null;
+					Thread.Sleep(_reconnectDelayMs);
+					if (_reconnectDelayMs < 60000) _reconnectDelayMs = Math.Min(60000, _reconnectDelayMs * 2);
+						continue;
                 };
                 
 
