@@ -42,9 +42,9 @@ namespace APRSForwarder
 		private Dictionary<string, NodeTel> _telCache = new Dictionary<string, NodeTel>();
 
 		private readonly TimeSpan _infoFresh = TimeSpan.FromMinutes(30);
-		private readonly TimeSpan _textFresh = TimeSpan.FromMinutes(15);
-		private readonly TimeSpan _posFresh = TimeSpan.FromMinutes(15);
-		private readonly TimeSpan _telFresh = TimeSpan.FromMinutes(10);
+		private readonly TimeSpan _textFresh = TimeSpan.FromMinutes(30);
+		private readonly TimeSpan _posFresh = TimeSpan.FromMinutes(30);
+		private readonly TimeSpan _telFresh = TimeSpan.FromMinutes(30);
 
         public MeshMqttBridge(
             APRSGateWay gw,
@@ -55,17 +55,17 @@ namespace APRSForwarder
             string nodePrefix, string symbol, string commentSuffix, int threadSleep)
         {
             _gw = gw;
-            _host = IsNullOrWhiteSpace(host) ? "mqtt.meshtastic.org" : host;
-            _port = port > 0 ? port : (useTls ? 8883 : 1883);
-            _useTls = useTls;
-            _tlsIgnoreErrors = tlsIgnoreErrors;
-            _user = (user == null) ? "meshdev" : user;
-            _pass = (pass == null) ? "large4cats" : pass;
-            _topic = IsNullOrWhiteSpace(topic) ? "msh/US/#" : topic;
-            _keepAlive = (keepAlive > 0) ? keepAlive : 60;
-            _nodePrefix = IsNullOrWhiteSpace(nodePrefix) ? "MT0XYZ" : nodePrefix;
-            _symbol = IsNullOrWhiteSpace(symbol) ? "/[" : symbol;
-            _commentSuffix = IsNullOrWhiteSpace(commentSuffix) ? "via Meshtastic" : commentSuffix;
+			_host = IsNullOrWhiteSpace(host) ? "mqtt.meshtastic.org" : host;
+			_port = port > 0 ? port : (useTls ? 8883 : 1883);
+			_useTls = useTls;
+			_tlsIgnoreErrors = tlsIgnoreErrors;
+			_user = (user == null) ? "meshdev" : user;
+			_pass = (pass == null) ? "large4cats" : pass;
+			_topic = IsNullOrWhiteSpace(topic) ? "msh/US/#" : topic;
+			_keepAlive = (keepAlive > 0) ? keepAlive : 60;
+			_nodePrefix = IsNullOrWhiteSpace(nodePrefix) ? "MT0XYZ" : nodePrefix;
+			_symbol = IsNullOrWhiteSpace(symbol) ? "/[" : symbol;
+			_commentSuffix = IsNullOrWhiteSpace(commentSuffix) ? "via Meshtastic" : commentSuffix;
 			_threadSleep = (threadSleep > 0) ? threadSleep : 3000;
         }
 
@@ -87,106 +87,167 @@ namespace APRSForwarder
             _thr = null;
         }
 
-        private void Run()
-        {
-            while (_running)
-            {
-                try
-                {
-                    using (TcpClient tcp = new TcpClient())
-                    {
-                        tcp.Connect(_host, _port);
+		private static bool IsTcpAlive(TcpClient tcp, Stream s)
+		{
+			if (tcp == null || s == null) return false;
+			try
+			{
+				if (!tcp.Connected) return false;
+				var soc = tcp.Client;
+				bool part1 = soc.Poll(0, SelectMode.SelectRead);
+				bool part2 = (soc.Available == 0);
+				if (part1 && part2) return false;
+				return true;
+			}
+			catch { return false; }
+		}
+
+		private void Run()
+		{
+			TcpClient tcp = null;
+			Stream netStream = null;
+			int backoffMs = 2000;
+
+			while (_running)
+			{
+				try
+				{
+					if (!IsTcpAlive(tcp, netStream))
+					{
+						try { netStream.Dispose(); } catch { }
+						try { tcp.Close(); } catch { }
+						netStream = null; tcp = null;
+
+						tcp = new TcpClient();
+						tcp.NoDelay = true;
+						tcp.Connect(_host, _port);
 						try { tcp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true); } catch { }
 
-                        Stream netStream = tcp.GetStream();
-                        if (_useTls)
-                        {
-                            SslStream ssl = new SslStream(
-                                netStream,
-                                false,
-                                delegate(object sender, X509Certificate cert, X509Chain chain, SslPolicyErrors errs)
-                                {
-                                    if (!_tlsIgnoreErrors) return errs == SslPolicyErrors.None;
-                                    return true;
-                                });
-                            ssl.AuthenticateAsClient(_host);
-                            netStream = ssl;
-                        }
+						netStream = tcp.GetStream();
+						if (_useTls)
+						{
+							var ssl = new SslStream(netStream, false,
+								(sender, cert, chain, errs) => _tlsIgnoreErrors || errs == SslPolicyErrors.None);
+							ssl.AuthenticateAsClient(_host);
+							netStream = ssl;
+						}
 
-                        netStream.ReadTimeout = 15000;
-                        netStream.WriteTimeout = 15000;
+						try { netStream.ReadTimeout = 15000; netStream.WriteTimeout = 15000; } catch { }
 
-                        string clientId = "APRSGW-" + Guid.NewGuid().ToString("N").Substring(0, 10);
-                        SendConnect(netStream, clientId, _keepAlive, _user, _pass);
+						string clientId = "APRSGW-" + Guid.NewGuid().ToString("N").Substring(0, 10);
+						SendConnect(netStream, clientId, _keepAlive, _user, _pass);
 
-                        Packet pkt = ReadPacket(netStream);
-                        if (pkt.Type != 0x20 || pkt.Payload.Length < 2 || pkt.Payload[1] != 0x00)
-                            throw new Exception("MQTT CONNACK failed");
+						Packet pkt;
+						DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+						for (;;)
+						{
+							pkt = ReadPacket(netStream);
+							if (pkt.Type == 0x20) break;
+							if (DateTime.UtcNow > deadline) throw new Exception("Timeout waiting for CONNACK");
+						}
+						if (pkt.Payload.Length < 2 || pkt.Payload[1] != 0x00)
+							throw new Exception("MQTT CONNACK failed");
+
 						Console.WriteLine("[MQTT] Connected to " + _host + ":" + _port + " (TLS=" + _useTls + ")");
 
-                        SendSubscribe(netStream, 1, _topic, 0);
-
-                        pkt = ReadPacket(netStream);
-                        if (pkt.Type != 0x90)
-                            throw new Exception("MQTT SUBACK not received");
+						SendSubscribe(netStream, 1, _topic, 0);
+						deadline = DateTime.UtcNow.AddSeconds(10);
+						for (;;)
+						{
+							pkt = ReadPacket(netStream);
+							if (pkt.Type == 0x90) break;
+							if (DateTime.UtcNow > deadline) throw new Exception("Timeout waiting for SUBACK");
+						}
 						Console.WriteLine("[MQTT] Subscribed to '" + _topic + "'");
 
-                        DateTime lastTx = DateTime.UtcNow;
-                        while (_running && tcp.Connected)
-                        {
-                            if ((DateTime.UtcNow - lastTx).TotalSeconds > Math.Max(10, _keepAlive / 2))
-                            {
-                                SendPingReq(netStream);
-                                lastTx = DateTime.UtcNow;
-                            }
+						backoffMs = 5000;
+					}
 
-                            if (!netStream.CanRead)
-                            {
-                                Thread.Sleep(200);
-                                continue;
-                            }
+					DateTime lastTx = DateTime.UtcNow;
 
-                            netStream.ReadTimeout = 1000;
-                            Packet p;
-                            try
-                            {
-                                p = ReadPacket(netStream);
-                            }
-                            catch (IOException)
-                            {
-                                continue;
-                            }
-                            catch (Exception)
-                            {
-                                break;
-                            }
+					while (_running && IsTcpAlive(tcp, netStream))
+					{
+						if ((DateTime.UtcNow - lastTx).TotalSeconds > Math.Max(10, _keepAlive / 2))
+						{
+							try { SendPingReq(netStream); lastTx = DateTime.UtcNow; }
+							catch (IOException) { break; }
+							catch { continue; }
+						}
 
-							if (p.Type == 0x30 || (p.Type & 0xF0) == 0x30)
-							{
-								if (p.Payload == null || p.Payload.Length < 2) continue;
-								int tlen = (p.Payload[0] << 8) | p.Payload[1];
-								if (2 + tlen > p.Payload.Length) continue;
+						if (!netStream.CanRead) { Thread.Sleep(100); continue; }
 
-								string topic = Encoding.UTF8.GetString(p.Payload, 2, tlen);
-								int skip = 2 + tlen;
-								if (skip < 0 || skip > p.Payload.Length) continue;
+						try { netStream.ReadTimeout = 1000; } catch { }
 
-								string msg = Encoding.UTF8.GetString(p.Payload, skip, p.Payload.Length - skip);
-								HandlePublish(msg, topic);
-							}
-                            else if (p.Type == 0xD0)
-                            {
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                }
+						Packet p;
+						try
+						{
+							p = ReadPacket(netStream);
+						}
+						catch (IOException)
+						{
+							continue;
+						}
+						catch (ObjectDisposedException)
+						{
+							break;
+						}
+						catch (Exception)
+						{
+							continue;
+						}
 
-                if (_running) Thread.Sleep(_threadSleep);
-            }
-        }
+						if (p.Type == 0 || p.Payload == null || p.Payload.Length == 0) continue;
+
+						if (p.Type == 0x30 || (p.Type & 0xF0) == 0x30)
+						{
+							if (p.Payload.Length < 2) continue;
+							int tlen = (p.Payload[0] << 8) | p.Payload[1];
+							if (2 + tlen > p.Payload.Length) continue;
+
+							string topic = Encoding.UTF8.GetString(p.Payload, 2, tlen);
+							int skip = 2 + tlen;
+							if (skip < 0 || skip > p.Payload.Length) continue;
+
+							string msg = Encoding.UTF8.GetString(p.Payload, skip, p.Payload.Length - skip);
+							try { HandlePublish(msg, topic); }
+							catch { }
+						}
+						else if (p.Type == 0xD0)
+						{
+						}
+						else
+						{
+							continue;
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+					bool dead = !IsTcpAlive(tcp, netStream);
+					Console.WriteLine(dead ? "[MQTT] Disconnected (" + ex.GetType().Name + "). Will reconnect." : "[MQTT] Non-fatal error: " + ex.GetType().Name + ". Staying on same socket.");
+					if (!dead) continue;
+
+					try { netStream.Dispose(); } catch { }
+					try { tcp.Close(); } catch { }
+					netStream = null; tcp = null;
+
+					Thread.Sleep(backoffMs);
+					backoffMs = Math.Min(backoffMs * 2, 30000);
+				}
+				catch
+				{
+				}
+
+				if (_running)
+				{
+					Thread.Sleep(backoffMs);
+					backoffMs = Math.Min(backoffMs * 2, 30000);
+				}
+			}
+
+			try { netStream.Dispose(); } catch { }
+			try { tcp.Close(); } catch { }
+		}
 
         private static void WriteUInt16BE(Stream s, ushort value)
         {
@@ -464,9 +525,9 @@ namespace APRSForwarder
 				Match md = Regex.Match(json, pat, RegexOptions.CultureInvariant);
 				if (md.Success)
 				{
-					string cand = ToLegalAprsCallsign(md.Groups[1].Value);
+					/* string cand = ToLegalAprsCallsign(md.Groups[1].Value);
 					if (Regex.IsMatch(cand, "^[A-Z0-9]{1,6}(-([0-9]|1[0-5]))?$"))
-						to = cand;
+						to = cand; */
 					break;
 				}
 			}
@@ -496,6 +557,7 @@ namespace APRSForwarder
         }
 
 		private readonly Dictionary<string,string> _idToName = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+		private readonly Dictionary<string, NodePos> _posById = new Dictionary<string, NodePos>(StringComparer.OrdinalIgnoreCase);
 
 		private void HandlePublish(string msg, string topic)
 		{
@@ -504,35 +566,30 @@ namespace APRSForwarder
 				if (string.IsNullOrEmpty(msg)) return;
 
                 string callsign = ExtractSenderFromJson(msg);
-                string stableId  = ExtractFirstString(msg, "\"id\"\\s*:\\s*\"([^\"]+)\"");
-                string longName  = ExtractLongNameFromJson(msg);
-                string shortName = ExtractShortNameFromJson(msg);
-
-                string pretty = null;
-                if (!IsNullOrWhiteSpace(longName))       pretty = longName; // ToLegalAprsCallsign(longName);
-                else if (!IsNullOrWhiteSpace(shortName)) pretty = shortName; // ToLegalAprsCallsign(shortName);
-
-                if (!IsNullOrWhiteSpace(pretty) && pretty.IndexOf('-') < 0 && !IsNullOrWhiteSpace(stableId))
-                    pretty = pretty + SafeSuffixFromJson(msg);
-
-                if (!IsNullOrWhiteSpace(stableId) && !IsNullOrWhiteSpace(pretty))
-                    _idToName[stableId] = pretty;
-
-                if (!IsNullOrWhiteSpace(pretty))
-                {
-                    callsign = pretty;
-                }
-                else if (!IsNullOrWhiteSpace(stableId))
-                {
-                    string mappedName;
-                    if (_idToName.TryGetValue(stableId, out mappedName) && !IsNullOrWhiteSpace(mappedName))
-                        callsign = mappedName;
-                    else if (IsNullOrWhiteSpace(callsign))
-                        callsign = stableId;
-                }
-
-                /* if (!IsNullOrWhiteSpace(callsign))
-                    callsign = ToLegalAprsCallsign(callsign); */
+				string stableId  = ExtractFirstString(msg, "\"id\"\\s*:\\s*\"([^\"]+)\"");
+				string longName  = ExtractLongNameFromJson(msg);
+				string shortName = ExtractShortNameFromJson(msg);
+				string pretty = null;
+				if (!IsNullOrWhiteSpace(longName))       pretty = longName; // ToLegalAprsCallsign(longName);
+				else if (!IsNullOrWhiteSpace(shortName)) pretty = shortName; // ToLegalAprsCallsign(shortName);
+				if (!IsNullOrWhiteSpace(pretty) && pretty.IndexOf('-') < 0 && !IsNullOrWhiteSpace(stableId))
+					pretty = pretty + SafeSuffixFromJson(msg);
+				if (!IsNullOrWhiteSpace(stableId) && !IsNullOrWhiteSpace(pretty))
+					_idToName[stableId] = pretty;
+				if (!IsNullOrWhiteSpace(pretty))
+				{
+					callsign = pretty;
+				}
+				else if (!IsNullOrWhiteSpace(stableId))
+				{
+					string mappedName;
+					if (_idToName.TryGetValue(stableId, out mappedName) && !IsNullOrWhiteSpace(mappedName))
+						callsign = mappedName;
+					else if (IsNullOrWhiteSpace(callsign))
+						callsign = stableId;
+				}
+				/* if (!IsNullOrWhiteSpace(callsign))
+					callsign = ToLegalAprsCallsign(callsign); */
 
 				string nName, nFw, nHw, nModel;
 				if (TryExtractNodeInfoFromJson(msg, out nName, out nFw, out nHw, out nModel))
@@ -590,12 +647,14 @@ namespace APRSForwarder
 				int? alt = null;
 				bool gotPosNow = TryExtractPositionFromJson(msg, out lat, out lon, out alt);
 
-				if (gotPosNow)
-				{
+				if (gotPosNow) {
 					NodePos p;
 					if (!_posCache.TryGetValue(callsign, out p)) p = new NodePos();
 					p.Lat = lat; p.Lon = lon; p.Alt = alt; p.Ts = DateTime.UtcNow;
 					_posCache[callsign] = p;
+
+					if (!IsNullOrWhiteSpace(stableId))
+						_posById[stableId] = p;
 				}
 
 				string telToUse = telSnippet;
@@ -649,14 +708,16 @@ namespace APRSForwarder
 				if (posComment.Length > 70) posComment = posComment.Substring(0, 70);
 
 				bool sendPos = gotPosNow;
-				if (!sendPos)
-				{
+				if (!sendPos) {
 					NodePos posCached;
-					if (_posCache.TryGetValue(callsign, out posCached) &&
-						(DateTime.UtcNow - posCached.Ts) <= _posFresh)
-					{
+					if (_posCache.TryGetValue(callsign, out posCached) && (DateTime.UtcNow - posCached.Ts) <= _posFresh) {
 						lat = posCached.Lat; lon = posCached.Lon; alt = posCached.Alt;
 						sendPos = true;
+					} else if (!IsNullOrWhiteSpace(stableId)) {
+						if (_posById.TryGetValue(stableId, out posCached) && (DateTime.UtcNow - posCached.Ts) <= _posFresh) {
+							lat = posCached.Lat; lon = posCached.Lon; alt = posCached.Alt;
+							sendPos = true;
+						}
 					}
 				}
 

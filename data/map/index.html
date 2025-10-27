@@ -1,9 +1,9 @@
-<!DOCTYPE HTML>
+﻿<!DOCTYPE HTML>
 	<html lang="en-US">
 		<head>
 			<title>APRS-Server</title>
 			<meta charset="UTF-8">
-			<meta name="viewport" content="width=device-width, initial-scale=1">
+			<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 			<meta name="robots" content="index" />
 			<meta name="robots" content="follow" />
 			<meta name="language" content="English" />
@@ -24,6 +24,7 @@
 			<link rel="stylesheet" href="style/custom.css">
 		</head>
 		<body class="w3-theme-dark">
+			<button id="toggleList" aria-expanded="false">Users</button>
 			<div class="w3-row">
 				<div class="w3-col m8">
 					<div id="map" style="position:relative; color: #000000; width: 100%; min-height: 100vh; height: 100vh; max-height: 100vh; z-index:0;">
@@ -120,6 +121,8 @@
 				var marker_cache = [];
 
 				var UpdateData = function(user,dt,lat,lon,speed,heading,id,age,symbol,registered,comment,status,caption) {
+					var needsListRefresh = false;
+
 					if(marker_cache.length == 0)
 						map.setView([lat,lon]);
 
@@ -172,8 +175,8 @@
 							};
 
 							if(mc.heading != heading)
-								$("#img"+id).css({'-webkit-transform' : 'rotate('+ heading +'deg)','-moz-transform' : 'rotate('+ heading +'deg)','-ms-transform' : 'rotate('+ heading +'deg)','transform' : 'rotate('+ heading +'deg)'});
-
+								$("#img"+id).css({'-webkit-transform':'rotate('+heading+'deg)','-moz-transform':'rotate('+heading+'deg)','-ms-transform':'rotate('+heading+'deg)','transform':'rotate('+heading+'deg)'});
+            
 							mc.symbol = symbol; mc.heading = heading; mc.speed = speed; mc.dt = dt;
 							mc.marker.bindPopup(txt);
 
@@ -190,11 +193,52 @@
 							marker_cache.splice(i, 1);
 							marker_cache.push(mc);
 
-							UpdateStatus();
+							if (needsListRefresh)
+								UpdateStatus();
 
 							return;
 						};
 					};
+
+					for(i=0;i<marker_cache.length;i++) {
+						if(marker_cache[i].id == id) {
+							var mc = marker_cache[i];
+							if (mc.user !== user) { needsListRefresh = true; mc.user = user; }
+
+							txt = '<table style="width:260px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:260px;">';
+
+							mc.age = age;
+							if(dt != mc.dt) {
+								var ci = Math.round(mc.age / 15); if(ci > 255) ci = 255;
+								var opc = 1 - ci / 450; ci = 'rgb('+ci+','+ci+','+ci+')';
+								$("#usericon"+mc.id).css('opacity',opc);
+							}
+							if ((lat != mc.lat) || (lon != mc.lon)) {
+								mc.llarray.push([lat,lon]);
+								mc.lat = lat; mc.lon = lon;
+								mc.marker.setLatLng([lat,lon]);
+								mc.marker.label.setLatLng([lat,lon]);
+							}
+							if(mc.symbol != symbol) {
+								var si = symbolToImage(symbol);
+								$("#usericon"+mc.id)[0].outerHTML = '<div id="usericon'+mc.id+'" class="aprs-usericon" style="'+si[0]+';font-weight:bold;color:white;text-align:center;padding: 3px 1px 3px 1px;">&nbsp;'+si[1]+'&nbsp;</div>';
+								}
+							if(mc.heading != heading)
+								$("#img"+id).css({'-webkit-transform':'rotate('+heading+'deg)','-moz-transform':'rotate('+heading+'deg)','-ms-transform':'rotate('+heading+'deg)','transform':'rotate('+heading+'deg)'});
+
+							mc.symbol = symbol; mc.heading = heading; mc.speed = speed; mc.dt = dt;
+							mc.marker.bindPopup(txt);
+							if(mc.follow) map.setView([lat,lon]);
+							if(mc.line != null) mc.line.setLatLngs(mc.llarray);
+							else if((mc.llarray != null) && (mc.llarray.length > 1)) {
+								mc.line = new L.Polyline(mc.llarray,{color:mc.color,weight:3}); mc.line.addTo(map);
+							}
+							marker_cache.splice(i,1);
+							marker_cache.push(mc);
+							if (needsListRefresh) UpdateStatus();
+							return;
+						}
+					}
 
 					var symba = symbolToImage(symbol);
 					var symbolImage = symba[0];
@@ -221,8 +265,8 @@
 					var opc = 1 - ci / 450;
 					ci = 'rgb('+ci+','+ci+','+ci+')';
 					$("#usericon"+id).css('opacity',opc);
-					marker_cache.push(mc);
 
+					marker_cache.push(mc);
 					UpdateStatus();
 				}
 
@@ -309,6 +353,9 @@
 						ulist = '<tr><td colspan="3">NONE</td></tr>';
 					};
 					$("#userlist").html(ulist);
+
+					try { updateUsersButtonCount(marker_cache.length); } catch(e){}
+					try { if (marker_cache.length) __openUserSheetOnce(); } catch(e){}
 				}
 
 				var Locate = function(u) {
@@ -443,6 +490,31 @@
 					});
 				}
 				iss_fetch_data ();
+
+			(function(){
+			  var panel = document.querySelector('.w3-col.m4');
+			  var btn   = document.getElementById('toggleList');
+			  if(!panel || !btn) return;
+
+			  function setOpen(open){
+				var isOpen = (open !== undefined) ? open : !panel.classList.contains('open');
+				panel.classList.toggle('open', isOpen);
+				btn.setAttribute('aria-expanded', String(isOpen));
+			  }
+			  btn.addEventListener('click', function(){ setOpen(); });
+
+			  var _UpdateStatus = window.UpdateStatus;
+			  window.UpdateStatus = function(){
+				try { _UpdateStatus(); } catch(e){}
+				try {
+				  btn.textContent = (typeof marker_cache !== 'undefined' && marker_cache) ? 
+					('Users (' + marker_cache.length + ')') : 'Users';
+				  if (window.matchMedia('(max-width:768px)').matches && marker_cache && marker_cache.length && !panel.__firstOpenDone){
+					setOpen(true); panel.__firstOpenDone = true;
+				  }
+				} catch(e){}
+			  };
+			})();
 			</script>
 		</body>
 	</html>

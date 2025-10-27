@@ -229,7 +229,7 @@ namespace APRSForwarder
                     {
                         _state = "connecting";
                         tcp_in_client.Connect(server_in, port_in);
-                        string txt2send = "user " + callsign + " pass " + passw + " vers APRSGateWay 0.1\r\n";
+                        string txt2send = "user " + callsign + " pass " + passw + " vers APRSGateWay 1.0\r\n";
                         byte[] arr = System.Text.Encoding.GetEncoding(1251).GetBytes(txt2send);
                         tcp_in_client.GetStream().Write(arr, 0, arr.Length);
                         incomingMessagesCounter = 0;
