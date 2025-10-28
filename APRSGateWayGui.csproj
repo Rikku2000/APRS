@@ -6,10 +6,10 @@
     <ProductVersion>8.0.50727</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{516d1007-466a-4a75-b566-c376f6a813ab}</ProjectGuid>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>aprsgateway</RootNamespace>
-    <AssemblyName>aprsgateway</AssemblyName>
+    <RootNamespace>aprsgatewaygui</RootNamespace>
+    <AssemblyName>aprsgatewaygui</AssemblyName>
     <TargetFrameworkVersion>v2.0</TargetFrameworkVersion>
     <FileUpgradeFlags>
     </FileUpgradeFlags>
@@ -23,7 +23,7 @@
     <Optimize>false</Optimize>
     <ApplicationIcon>aprs.ico</ApplicationIcon>
     <OutputPath>.\data</OutputPath>
-    <DefineConstants>DEBUG;TRACE;APRSGATEWAY</DefineConstants>
+    <DefineConstants>DEBUG;TRACE;APRSGATEWAY;GUI</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
@@ -32,7 +32,7 @@
     <Optimize>true</Optimize>
     <ApplicationIcon>aprs.ico</ApplicationIcon>
     <OutputPath>.\data</OutputPath>
-    <DefineConstants>TRACE;APRSGATEWAY</DefineConstants>
+    <DefineConstants>TRACE;APRSGATEWAY;GUI</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
@@ -48,6 +48,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="APRSGateWayGUI.cs" />
     <Compile Include="IniFile.cs" />
     <Compile Include="APRSGateWay.cs" />
     <Compile Include="MeshMqttBridge.cs" />
