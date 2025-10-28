@@ -258,6 +258,48 @@
 
 				var marker_cache = [];
 
+				var currentFilter = (localStorage.getItem('srcFilter') || 'all');
+
+				function hasGatewayTag(mc){
+					var hay = ((mc.comment||'') + ' ' + (mc.status||'')).toLowerCase();
+					return /via\s+(ais|flightaware|dump1090|meshtastic)/i.test(hay);
+				}
+
+				function markerMatchesFilter(mc){
+					if (currentFilter === 'all') return true;
+					if (currentFilter === 'aprs') return !hasGatewayTag(mc);
+					var term = currentFilter.toLowerCase();
+					var hay = ((mc.comment||'') + ' ' + (mc.status||'')).toLowerCase();
+					return hay.indexOf(term) !== -1;
+				}
+
+				function onChangeFilter(val){
+					currentFilter = val;
+					try { localStorage.setItem('srcFilter', currentFilter); } catch(_) {}
+					applyFilter();
+					try { UpdateStatus(); } catch(_) {}
+				}
+
+				function applyFilter(){
+					var shown = 0;
+					for (var i=0;i<marker_cache.length;i++){
+					  var mc = marker_cache[i];
+					  var match = markerMatchesFilter(mc);
+
+					  if (match){
+						if (mc.marker && !map.hasLayer(mc.marker)) mc.marker.addTo(map);
+						if (mc.line && !map.hasLayer(mc.line)) mc.line.addTo(map);
+						shown++;
+					  } else {
+						if (mc.marker && map.hasLayer(mc.marker)) map.removeLayer(mc.marker);
+						if (mc.line && map.hasLayer(mc.line)) map.removeLayer(mc.line);
+					  }
+					}
+					try { updateUsersButtonCount(shown); } catch(e){}
+					var uinfoEl = document.getElementById('userinfo');
+					if (uinfoEl) uinfoEl.innerHTML = ' <b>' + shown + '</b>';
+				}
+
 				var UpdateData = function(user,dt,lat,lon,speed,heading,id,age,symbol,registered,comment,status,caption) {
 					var needsListRefresh = false;
 
@@ -382,10 +424,11 @@
 					var symbolImage = symba[0];
 
 					txt = '<table style="width:260px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:260px;">' + txt;
-					var mc = {"user":user,"lat":lat,"lon":lon,"heading":heading,"speed":speed,"dt":dt,"id":id,"age":age,"symbol":symbol};
+					var mc = {"user":user,"lat":lat,"lon":lon,"heading":heading,"speed":speed,"dt":dt,"id":id,"age":age,"symbol":symbol,"status":status};
 					mc.color = colors[id % 10];
 					mc.follow = false;
 					mc.comment = comment;
+					mc.status  = status;
 					mc.llarray = [[lat,lon]];
 					mc.tableicon = symbolImage;
 					mc.line = null;
@@ -416,6 +459,8 @@
 
 					marker_cache.push(mc);
 					UpdateStatus();
+
+					try { applyFilter(); } catch(e){}
 				}
 
 				var symbolToImage = function(symb) {
@@ -474,7 +519,21 @@
 					html += '<a class="w3-button w3-theme-button w3-hover-theme-button w3-round-large" style="text-decoration:none;" href="#" onclick="ClearPath();return false;">Clear Path</a> ';
 					html += '<a class="w3-button w3-theme-button w3-hover-theme-button w3-round-large" style="text-decoration:none;" href="#" onclick="ClearMap();return false;">Clear All</a>';
 
+					html += '<div style="margin-top:10px"></div>';
+					html += '<label class="w3-small" for="sourceFilter">Source filter:</label> ';
+					html += '<select id="sourceFilter" class="w3-select w3-round-large w3-theme-light" ' +
+							'onchange="onChangeFilter(this.value)" style="max-width:260px;">' +
+							'<option value="all">Show: All</option>' +
+							'<option value="aprs">Show: APRS only</option>' +
+							'<option value="via AIS">Show: via AIS</option>' +
+							'<option value="via FlightAware">Show: via FlightAware</option>' +
+							'<option value="via dump1090">Show: via dump1090</option>' +
+							'<option value="via Meshtastic">Show: via Meshtastic</option>' +
+							'</select>';
+
 					$("#userpanel").html(html);
+
+					try { document.getElementById('sourceFilter').value = currentFilter; } catch(e){}
 
 					var uinfo = ' <b>'+ (marker_cache.length) +'</b>';
 					$("#userinfo").html(uinfo);
@@ -482,8 +541,12 @@
 					var string1 = "0", string2 = "0", result = "0";
 
 					var table_row = 'w3-theme-dark', udt = '', ulist = '';
+					var displayCount = 0;
 					if (marker_cache.length > 0) {
 						for (i = marker_cache.length - 1; i >= 0; i--) {
+						    if (!markerMatchesFilter(marker_cache[i])) continue;
+								displayCount++;
+
 							if (table_row == "w3-theme-table")
 								table_row = "w3-theme-dark";
 							else
@@ -501,6 +564,9 @@
 						ulist = '<tr><td colspan="3">NONE</td></tr>';
 					};
 					$("#userlist").html(ulist);
+
+					var uinfo = ' <b>'+ displayCount +'</b>';
+					$("#userinfo").html(uinfo);
 
 					try { updateUsersButtonCount(marker_cache.length); } catch(e){}
 					try { if (marker_cache.length) __openUserSheetOnce(); } catch(e){}
@@ -616,6 +682,7 @@
 
 				UpdateStatus();
 				UpdateBuddies();
+				applyFilter();
 
 				var socket = null;
 				var Reconnect = function() { 
