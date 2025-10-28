@@ -6,7 +6,7 @@
     <ProductVersion>8.0.50727</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>{516d1007-466a-4a75-b566-c376f6a813ab}</ProjectGuid>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>aprsgateway</RootNamespace>
     <AssemblyName>aprsgateway</AssemblyName>
@@ -42,9 +42,13 @@
     <Reference Include="System.Net, Version=3.5.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL" />
     <Reference Include="System.Web" />
     <Reference Include="System.Xml" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="APRSGateWayGUI.cs" />
     <Compile Include="IniFile.cs" />
     <Compile Include="APRSGateWay.cs" />
     <Compile Include="MeshMqttBridge.cs" />

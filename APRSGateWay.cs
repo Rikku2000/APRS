@@ -64,6 +64,12 @@ namespace APRSForwarder
 		{
 		}
 
+		public void ReloadFromIni()
+		{
+			try { Stop(); } catch { }
+			try { Start(); } catch { }
+		}
+
 		private static readonly Regex UncompressedPos = new Regex(@"[!=@]\s*(\d{2})(\d{2}\.\d{2})([NS]).*?([0-1]\d{2})(\d{2}\.\d{2})([EW])", RegexOptions.Compiled);
 		private static bool IsNullIslandAprs(string line)
 		{

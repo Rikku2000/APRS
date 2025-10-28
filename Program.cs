@@ -6,17 +6,18 @@ using System.Text;
 using System.Globalization;
 using System.Threading;
 
-
 #if APRSGATEWAY
+using System.Windows.Forms;
+
 namespace APRSForwarder
 {
     class Program
-    {        
+    {
         static void Main(string[] args)
         {
-			APRSGateWay gateway = new APRSGateWay();
-			gateway.Start();
-			// gateway.Stop();
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.Run(new APRSGateWayGUI());
         }
     }
 }
