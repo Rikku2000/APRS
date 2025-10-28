@@ -32,7 +32,7 @@ namespace APRSForwarder
             tabs.Dock = DockStyle.Top; tabs.Height = 410;
 
             TabPage pgAprs = new TabPage("APRSGateway");
-            TabPage pgMesh = new TabPage("MeshGateway");
+            TabPage pgMesh = new TabPage("Meshtastic");
             TabPage pgFA   = new TabPage("FlightAware");
             TabPage pgD1090= new TabPage("Dump1090");
             TabPage pgVF   = new TabPage("VesselFinder");
@@ -55,49 +55,49 @@ namespace APRSForwarder
             CreatePair(pgAprs, "Callsign", "aprs_callsign", 4, rowHeight, labelLeft, tbLeft, tbWidth);
             CreatePair(pgAprs, "Passcode", "aprs_passcode", 5, rowHeight, labelLeft, tbLeft, tbWidth);
 
-            CreatePair(pgMesh, "enabled (true/false)", "mesh_enabled", 0, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "mqtt_host", "mesh_host", 1, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "mqtt_port", "mesh_port", 2, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "use_tls (true/false)", "mesh_tls", 3, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "tls_ignore_errors (true/false)", "mesh_tls_ign", 4, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "mqtt_user", "mesh_user", 5, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "mqtt_pass", "mesh_pass", 6, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "mqtt_topic", "mesh_topic", 7, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "keepalive", "mesh_keepalive", 8, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "node_callsign_prefix", "mesh_prefix", 9, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "default_symbol", "mesh_symbol", 10, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "comment_suffix", "mesh_cmt", 11, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgMesh, "threadsleep (ms)", "mesh_threadsleep", 12, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "Enabled (true/false)", "mesh_enabled", 0, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "MQTT Host", "mesh_host", 1, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "MQTT Port", "mesh_port", 2, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "Use TLS (true/false)", "mesh_tls", 3, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "TLS ignore errors (true/false)", "mesh_tls_ign", 4, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "MQTT User", "mesh_user", 5, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "MQTT Password", "mesh_pass", 6, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "MQTT Topic", "mesh_topic", 7, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "Keepalive", "mesh_keepalive", 8, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "Node Callsign Prefix", "mesh_prefix", 9, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "Default Symbol", "mesh_symbol", 10, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "Comment Suffix", "mesh_cmt", 11, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgMesh, "Threadsleep (ms)", "mesh_threadsleep", 12, rowHeight, labelLeft, tbLeft, tbWidth);
 
-            CreatePair(pgFA, "enabled (true/false)", "fa_enabled", 0, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgFA, "aircraft_url", "fa_url", 1, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgFA, "poll_secs", "fa_poll", 2, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgFA, "default_symbol", "fa_symbol", 3, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgFA, "comment_suffix", "fa_cmt", 4, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgFA, "node_callsign_prefix", "fa_prefix", 5, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgFA, "Enabled (true/false)", "fa_enabled", 0, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgFA, "Aircraft URL", "fa_url", 1, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgFA, "Poll Sec.", "fa_poll", 2, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgFA, "Default Symbol", "fa_symbol", 3, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgFA, "Comment Suffix", "fa_cmt", 4, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgFA, "Node Callsign Prefix", "fa_prefix", 5, rowHeight, labelLeft, tbLeft, tbWidth);
 
-            CreatePair(pgD1090, "enabled (true/false)", "d1090_enabled", 0, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgD1090, "json_url", "d1090_json", 1, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgD1090, "poll_secs", "d1090_poll", 2, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgD1090, "sbs_host", "d1090_sbs_host", 3, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgD1090, "sbs_port", "d1090_sbs_port", 4, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgD1090, "default_symbol", "d1090_symbol", 5, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgD1090, "comment_suffix", "d1090_cmt", 6, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgD1090, "node_callsign_prefix", "d1090_prefix", 7, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgD1090, "min_tx_interval_secs", "d1090_min_tx", 8, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgD1090, "Enabled (true/false)", "d1090_enabled", 0, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgD1090, "JSON Url", "d1090_json", 1, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgD1090, "Poll Sec.", "d1090_poll", 2, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgD1090, "SBS Host", "d1090_sbs_host", 3, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgD1090, "SBS Port", "d1090_sbs_port", 4, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgD1090, "Default Symbol", "d1090_symbol", 5, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgD1090, "Comment Suffix", "d1090_cmt", 6, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgD1090, "Node Callsign Prefix", "d1090_prefix", 7, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgD1090, "Min TX Interval Sec.", "d1090_min_tx", 8, rowHeight, labelLeft, tbLeft, tbWidth);
 
-            CreatePair(pgVF, "enabled (true/false)", "vf_enabled", 0, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgVF, "json_url", "vf_json", 1, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgVF, "poll_secs", "vf_poll", 2, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgVF, "default_symbol", "vf_symbol", 3, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgVF, "comment_suffix", "vf_cmt", 4, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgVF, "node_callsign_prefix", "vf_prefix", 5, rowHeight, labelLeft, tbLeft, tbWidth);
-            CreatePair(pgVF, "min_tx_interval_secs", "vf_min_tx", 6, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgVF, "Enabled (true/false)", "vf_enabled", 0, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgVF, "JSON Url", "vf_json", 1, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgVF, "Poll Sec.", "vf_poll", 2, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgVF, "Default Symbol", "vf_symbol", 3, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgVF, "Comment Suffix", "vf_cmt", 4, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgVF, "Node Callsign Prefix", "vf_prefix", 5, rowHeight, labelLeft, tbLeft, tbWidth);
+            CreatePair(pgVF, "Min TX Interval Sec.", "vf_min_tx", 6, rowHeight, labelLeft, tbLeft, tbWidth);
 
             btnLoad  = new Button(); btnLoad.Text = "Load"; btnLoad.Left = 10;  btnLoad.Top = tabs.Bottom + 10; btnLoad.Width = 90;
             btnSave  = new Button(); btnSave.Text = "Save"; btnSave.Left = 110; btnSave.Top = tabs.Bottom + 10; btnSave.Width = 90;
             btnApply = new Button(); btnApply.Text = "Apply"; btnApply.Left = 210; btnApply.Top = tabs.Bottom + 10; btnApply.Width = 90;
-            cbAuto   = new CheckBox(); cbAuto.Text = "Auto Save"; cbAuto.Left = 310; cbAuto.Top = tabs.Bottom + 10; cbAuto.Width = 100;
+            cbAuto   = new CheckBox(); cbAuto.Text = "Auto Save"; cbAuto.Left = 310; cbAuto.Top = tabs.Bottom + 10; cbAuto.Width = 110;
             btnStart = new Button(); btnStart.Text = "Start"; btnStart.Left = this.Width - 110; btnStart.Top = tabs.Bottom + 10; btnStart.Width = 80;
             btnStop  = new Button(); btnStop.Text = "Stop"; btnStop.Left = this.Width - 200; btnStop.Top = tabs.Bottom + 10; btnStop.Width = 80;
 
@@ -107,6 +107,12 @@ namespace APRSForwarder
             this.Controls.Add(cbAuto);
             this.Controls.Add(btnStart);
             this.Controls.Add(btnStop);
+
+			CheckBox cbAutostart = new CheckBox();
+			cbAutostart.Name = "cbAutostart";
+			cbAutostart.Text = "Autostart";
+			cbAutostart.Left = 420; cbAutostart.Top = tabs.Bottom + 10; cbAutostart.Width = 110;
+			this.Controls.Add(cbAutostart);
 
             txtLog = new TextBox();
             txtLog.Multiline = true; txtLog.ScrollBars = ScrollBars.Both;
@@ -132,7 +138,11 @@ namespace APRSForwarder
 
             LoadIniToUi();
 
-			try { _gw.Start(); } catch (Exception ex) { Console.WriteLine("[GUI] " + ex.Message); }
+			Control[] ca2 = this.Controls.Find("cbAutostart", true);
+			bool doAutoStart = (ca2 != null && ca2.Length > 0 && ca2[0] is CheckBox) ? ((CheckBox)ca2[0]).Checked : false;
+			if (doAutoStart) {
+				try { _gw.Start(); } catch (Exception ex) { Console.WriteLine("[GUI] " + ex.Message); }
+			}
         }
 
         private void CreatePair(TabPage pg, string label, string name, int row, int rowHeight, int labelLeft, int tbLeft, int tbWidth)
@@ -251,6 +261,11 @@ namespace APRSForwarder
         {
             SimpleIni ini = new SimpleIni(_iniPath);
 
+			string autostart = ini.Read("autostart", "APRSGateWayGUI");
+			Control[] ca = this.Controls.Find("cbAutostart", true);
+			if (ca != null && ca.Length > 0 && ca[0] is CheckBox)
+				((CheckBox)ca[0]).Checked = (autostart == "true" || autostart == "1" || autostart == "True");
+
             SetTB("tb_aprs_server_in_url",  ini.Read("server_in_url", "APRSGateway"));
             SetTB("tb_aprs_server_in_port", ini.Read("server_in_port", "APRSGateway"));
             SetTB("tb_aprs_server_out_url", ini.Read("server_out_url", "APRSGateway"));
@@ -303,6 +318,10 @@ namespace APRSForwarder
         private void SaveUiToIni()
         {
             SimpleIni ini = new SimpleIni(_iniPath);
+
+			Control[] ca = this.Controls.Find("cbAutostart", true);
+			bool autostartChecked = (ca != null && ca.Length > 0 && ca[0] is CheckBox) ? ((CheckBox)ca[0]).Checked : false;
+			ini.Write("autostart", autostartChecked ? "true" : "false", "APRSGateWayGUI");
 
             ini.Write("server_in_url",     GetTB("tb_aprs_server_in_url"),  "APRSGateway");
             ini.Write("server_in_port",    GetTB("tb_aprs_server_in_port"), "APRSGateway");
