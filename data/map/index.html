@@ -25,6 +25,7 @@
 		</head>
 		<body class="w3-theme-dark">
 			<button id="toggleList" aria-expanded="false">Users</button>
+			<button id="themeToggle">Switch</button>
 			<div class="w3-row">
 				<div class="w3-col m8">
 					<div id="map" style="position:relative; color: #000000; width: 100%; min-height: 100vh; height: 100vh; max-height: 100vh; z-index:0;">
@@ -42,7 +43,7 @@
 								<thead>
 									<tr>
 										<td style="width: 10%;">Id</td>
-										<td style="width: 90%;">Users: <span id="userinfo" style="text-decoration: none; font-size: 14px;"></span> / Message</td>
+										<td style="width: 90%;">Users: <span id="userinfo" style="text-decoration: none; font-size: 14px;"></span></td>
 									</tr>
 								</thead>
 							</table>
@@ -107,8 +108,136 @@
 
 				var openstreetmap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 15, attribution: 'Open Street Map', opacity: 0.75 });
 				openstreetmap.addTo(map);
-
 				var basemaps = { "Open Street Map": openstreetmap };
+
+				function findMarkersNear(latlng, pxRadius){
+				  if (!window.map || !window.marker_cache) return [];
+				  var p = map.latLngToLayerPoint(latlng);
+				  var near = [];
+				  for (var i=0;i<marker_cache.length;i++){
+					var mc = marker_cache[i];
+					if (!mc || !mc.marker) continue;
+					var q = map.latLngToLayerPoint(mc.marker.getLatLng());
+					var dx = p.x - q.x, dy = p.y - q.y;
+					if ((dx*dx + dy*dy) <= (pxRadius*pxRadius)) near.push(mc);
+				  }
+				  near.sort(function(a,b){
+					var ad = (typeof a.dt === 'number') ? a.dt : Date.parse(a.dt || 0);
+					var bd = (typeof b.dt === 'number') ? b.dt : Date.parse(b.dt || 0);
+					return bd - ad;
+				  });
+				  return near;
+				}
+
+				function openMarkerChooser(neighbors, atLatLng){
+				  var many = neighbors.length > 8;
+
+				  var root = document.createElement('div');
+				  root.style.minWidth = '260px';
+				  root.style.maxWidth = '340px';
+				  root.style.zIndex = '100';
+
+				  var title = document.createElement('div');
+				  title.style.fontWeight = '600';
+				  title.style.marginBottom = '6px';
+				  title.textContent = 'Select a station (' + neighbors.length + ')';
+				  root.appendChild(title);
+
+				  var searchBox = null;
+				  if (many){
+					searchBox = document.createElement('input');
+					searchBox.type = 'search';
+					searchBox.placeholder = 'Search…';
+					searchBox.style.cssText = 'width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:10px;margin-bottom:8px;';
+					root.appendChild(searchBox);
+				  }
+
+				  var listWrap = document.createElement('div');
+				  listWrap.id = 'ovlList';
+				  listWrap.style.maxHeight = '260px';
+				  listWrap.style.overflow = 'auto';
+				  root.appendChild(listWrap);
+
+				  var ul = document.createElement('ul');
+				  ul.style.listStyle = 'none';
+				  ul.style.margin = '0';
+				  ul.style.padding = '0';
+				  listWrap.appendChild(ul);
+
+				  function escape(s){ return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+				  function render(items){
+					ul.innerHTML = '';
+					if (!items.length){
+					  var li = document.createElement('li');
+					  li.style.color = '#999';
+					  li.style.padding = '6px 2px';
+					  li.textContent = 'No matches';
+					  ul.appendChild(li);
+					  return;
+					}
+					for (var i=0;i<items.length;i++){
+					  var mc = items[i];
+					  var li = document.createElement('li');
+					  li.style.margin = '4px 0';
+
+					  var btn = document.createElement('button');
+					  btn.type = 'button';
+					  btn.setAttribute('data-id', String(mc.id||''));
+					  btn.style.cssText = 'width:100%;text-align:left;padding:8px 10px;border:1px solid #ddd;border-radius:10px;background:#fff;display:block;cursor:pointer;';
+					  btn.innerHTML =
+						'<div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+						  escape(mc.user || mc.id || '') +
+						'</div>' +
+						(mc.comment || mc.status
+						  ? '<div style="font-size:12px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + escape(mc.comment || mc.status) + '</div>'
+						  : '');
+
+					  li.appendChild(btn);
+					  ul.appendChild(li);
+					}
+				  }
+
+				  render(neighbors);
+
+				  var chooser = L.popup({autoPan:true, closeOnClick:true, className:'ovl-chooser'})
+					.setLatLng(atLatLng)
+					.setContent(root);
+
+				  L.DomEvent.disableClickPropagation(root);
+				  L.DomEvent.disableScrollPropagation(root);
+
+				  root.addEventListener('click', function(ev){
+					var btn = ev.target.closest('button[data-id]');
+					if (!btn) return;
+					ev.preventDefault();
+					ev.stopPropagation();
+					var id = btn.getAttribute('data-id');
+					for (var i=0;i<marker_cache.length;i++){
+					  var mc = marker_cache[i];
+					  if (String(mc.id) === String(id) && mc.marker){
+						map.closePopup(chooser);
+						map.panTo(mc.marker.getLatLng());
+						mc.marker.openPopup();
+						return;
+					  }
+					}
+				  });
+
+				  if (many && searchBox){
+					searchBox.addEventListener('input', function(){
+					  var f = (searchBox.value || '').trim().toLowerCase();
+					  var items = neighbors.filter(function(mc){
+						var hay = ((mc.user||'')+' '+(mc.id||'')+' '+(mc.comment||'')+' '+(mc.status||'')).toLowerCase();
+						return !f || hay.indexOf(f) !== -1;
+					  });
+					  render(items);
+					});
+					setTimeout(function(){ try { searchBox.focus({preventScroll:true}); } catch(_){} }, 0);
+				  }
+
+				  chooser.openOn(map);
+				}
 
 				var pad = function(num, size) {
 					var s = num+"";
@@ -252,10 +381,20 @@
 					mc.tableicon = symbolImage;
 					mc.line = null;
 					mc.icon = new L.DivIcon({className: 'aprs-clear', html: '<div id="usericon'+id+'" class="aprs-usericon" style="'+symbolImage+';font-weight:bold;color:white;text-align:center;padding: 3px 1px 3px 1px;"><img id="img'+id+'" src="style/arrow.png" class="aprs-hdg"/>&nbsp;'+symba[1]+'&nbsp;</div>'});
-					mc.marker = new L.Marker([lat,lon], {icon: mc.icon});
+					mc.marker = new L.Marker([lat,lon],{icon: mc.icon, riseOnHover:true});
 					mc.marker.bindPopup(txt);
 					mc.marker.bindLabel(typeof caption !== 'undefined' ? caption : user, { direction: 'right', noHide:true });
 					mc.marker.addTo(map);
+					mc.marker.on('click', function(e){
+					  try {
+						var near = findMarkersNear(e.latlng, 18);
+						if (near.length > 1) {
+						  openMarkerChooser(near, e.latlng);
+						  L.DomEvent.stop(e);
+						  return false;
+						}
+					  } catch(_) {}
+					});
 
 					$("#img"+id).css({'-webkit-transform' : 'rotate('+ mc.heading +'deg)','-moz-transform' : 'rotate('+ mc.heading +'deg)','-ms-transform' : 'rotate('+ mc.heading +'deg)','transform' : 'rotate('+ mc.heading +'deg)'});
 
@@ -471,7 +610,8 @@
 
 				var socket = null;
 				var Reconnect = function() { 
-					var socket_url = 'ws://'+location.hostname+':8060/';
+					// var socket_url = 'ws://'+location.hostname+':8060/';
+					var socket_url = 'ws://192.168.0.73:8060/';
 					socket = new WebSocket(socket_url);
 					socket.onopen = function() { };
 					socket.onmessage = function (evt) { UpdateFromWebSocket(evt.data);  };
@@ -491,30 +631,43 @@
 				}
 				iss_fetch_data ();
 
-			(function(){
-			  var panel = document.querySelector('.w3-col.m4');
-			  var btn   = document.getElementById('toggleList');
-			  if(!panel || !btn) return;
+				(function(){
+					const KEY = 'ui-theme';
+					const root = document.documentElement;
+					const saved = localStorage.getItem(KEY);
+					if (saved === 'dark' || saved === 'light')
+						root.setAttribute('data-theme', saved === 'dark' ? 'dark' : '');
+					document.getElementById('themeToggle').addEventListener('click', () => {
+						const isDark = root.getAttribute('data-theme') === 'dark';
+						const next = isDark ? 'light' : 'dark';
+						if (next === 'light') root.removeAttribute('data-theme'); else root.setAttribute('data-theme','dark');
+						localStorage.setItem(KEY, next);
+					});
+				})();
 
-			  function setOpen(open){
-				var isOpen = (open !== undefined) ? open : !panel.classList.contains('open');
-				panel.classList.toggle('open', isOpen);
-				btn.setAttribute('aria-expanded', String(isOpen));
-			  }
-			  btn.addEventListener('click', function(){ setOpen(); });
+				(function(){
+					var panel = document.querySelector('.w3-col.m4');
+					var btn   = document.getElementById('toggleList');
+					if(!panel || !btn) return;
 
-			  var _UpdateStatus = window.UpdateStatus;
-			  window.UpdateStatus = function(){
-				try { _UpdateStatus(); } catch(e){}
-				try {
-				  btn.textContent = (typeof marker_cache !== 'undefined' && marker_cache) ? 
-					('Users (' + marker_cache.length + ')') : 'Users';
-				  if (window.matchMedia('(max-width:768px)').matches && marker_cache && marker_cache.length && !panel.__firstOpenDone){
-					setOpen(true); panel.__firstOpenDone = true;
-				  }
-				} catch(e){}
-			  };
-			})();
+					function setOpen(open){
+						var isOpen = (open !== undefined) ? open : !panel.classList.contains('open');
+						panel.classList.toggle('open', isOpen);
+						btn.setAttribute('aria-expanded', String(isOpen));
+					}
+					btn.addEventListener('click', function(){ setOpen(); });
+
+					var _UpdateStatus = window.UpdateStatus;
+					window.UpdateStatus = function(){
+						try { _UpdateStatus(); } catch(e){}
+						try {
+							btn.textContent = (typeof marker_cache !== 'undefined' && marker_cache) ? ('Users (' + marker_cache.length + ')') : 'Users';
+							if (window.matchMedia('(max-width:768px)').matches && marker_cache && marker_cache.length && !panel.__firstOpenDone){
+								setOpen(true); panel.__firstOpenDone = true;
+							}
+						} catch(e){}
+					};
+				})();
 			</script>
 		</body>
 	</html>

@@ -309,6 +309,46 @@ namespace APRSForwarder
 			return true;
 		}
 
+		private static string ExtractAnyLongName(string json)
+		{
+			if (string.IsNullOrEmpty(json)) return null;
+			string s;
+			s = ExtractFirstString(json, "\"payload\"\\s*:\\s*\\{[^}]*?\"longname\"\\s*:\\s*\"([^\"]+)\""); if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"payload\"\\s*:\\s*\\{[^}]*?\"longName\"\\s*:\\s*\"([^\"]+)\""); if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"user\"\\s*:\\s*\\{[^}]*?\"longName\"\\s*:\\s*\"([^\"]+)\"");   if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"longname\"\\s*:\\s*\"([^\"]+)\"");                              if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"longName\"\\s*:\\s*\"([^\"]+)\"");                              if (!string.IsNullOrEmpty(s)) return s;
+			return null;
+		}
+		private static string ExtractAnyShortName(string json)
+		{
+			if (string.IsNullOrEmpty(json)) return null;
+			string s;
+			s = ExtractFirstString(json, "\"payload\"\\s*:\\s*\\{[^}]*?\"shortname\"\\s*:\\s*\"([^\"]+)\""); if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"payload\"\\s*:\\s*\\{[^}]*?\"shortName\"\\s*:\\s*\"([^\"]+)\""); if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"user\"\\s*:\\s*\\{[^}]*?\"shortName\"\\s*:\\s*\"([^\"]+)\"");    if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"shortname\"\\s*:\\s*\"([^\"]+)\"");                              if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"shortName\"\\s*:\\s*\"([^\"]+)\"");                              if (!string.IsNullOrEmpty(s)) return s;
+			return null;
+		}
+		private static string ExtractStableId(string json)
+		{
+			if (string.IsNullOrEmpty(json)) return null;
+			string s;
+			s = ExtractFirstString(json, "\"sender\"\\s*:\\s*\"([^\"]+)\"");                                if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"payload\"\\s*:\\s*\\{[^}]*?\"id\"\\s*:\\s*\"([^\"]+)\"");       if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"user\"\\s*:\\s*\\{[^}]*?\"id\"\\s*:\\s*\"([^\"]+)\"");          if (!string.IsNullOrEmpty(s)) return s;
+			s = ExtractFirstString(json, "\"id\"\\s*:\\s*\"([^\"]+)\"");                                    if (!string.IsNullOrEmpty(s)) return s;
+			var m = System.Text.RegularExpressions.Regex.Match(json, "\"from\"\\s*:\\s*(\\d+)");
+			ulong n;
+			if (m.Success)
+			{
+				if (ulong.TryParse(m.Groups[1].Value, out n))
+					return "!" + n.ToString("x8");
+			}
+			return null;
+		}
+
         private static string ExtractLongNameFromJson(string json)
         {
             if (string.IsNullOrEmpty(json)) return null;
@@ -565,17 +605,21 @@ namespace APRSForwarder
 			{
 				if (string.IsNullOrEmpty(msg)) return;
 
-                string callsign = ExtractSenderFromJson(msg);
-				string stableId  = ExtractFirstString(msg, "\"id\"\\s*:\\s*\"([^\"]+)\"");
-				string longName  = ExtractLongNameFromJson(msg);
-				string shortName = ExtractShortNameFromJson(msg);
+				string callsign = ExtractSenderFromJson(msg);
+				string stableId = ExtractStableId(msg);
+				string longName  = ExtractAnyLongName(msg);
+				string shortName = ExtractAnyShortName(msg);
+
 				string pretty = null;
 				if (!IsNullOrWhiteSpace(longName))       pretty = longName; // ToLegalAprsCallsign(longName);
 				else if (!IsNullOrWhiteSpace(shortName)) pretty = shortName; // ToLegalAprsCallsign(shortName);
+
 				if (!IsNullOrWhiteSpace(pretty) && pretty.IndexOf('-') < 0 && !IsNullOrWhiteSpace(stableId))
 					pretty = pretty + SafeSuffixFromJson(msg);
+
 				if (!IsNullOrWhiteSpace(stableId) && !IsNullOrWhiteSpace(pretty))
 					_idToName[stableId] = pretty;
+
 				if (!IsNullOrWhiteSpace(pretty))
 				{
 					callsign = pretty;
@@ -588,6 +632,7 @@ namespace APRSForwarder
 					else if (IsNullOrWhiteSpace(callsign))
 						callsign = stableId;
 				}
+
 				/* if (!IsNullOrWhiteSpace(callsign))
 					callsign = ToLegalAprsCallsign(callsign); */
 

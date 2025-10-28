@@ -19,6 +19,14 @@ namespace APRSWebServer
 {
     public class APRSData
     {
+		private static bool IsNullOrNine(double lat, double lon)
+		{
+			const double eps = 1e-6;
+			bool isZeroZero = Math.Abs(lat) < eps && Math.Abs(lon) < eps;
+			bool isNineNine = Math.Abs(Math.Abs(lat) - 9.0) < eps && Math.Abs(Math.Abs(lon) - 9.0) < eps;
+			return isZeroZero || isNineNine;
+		}
+
         public static int CallsignChecksum(string callsign)
         {
             if (callsign == null) return 99999;
@@ -170,6 +178,8 @@ namespace APRSWebServer
                             b.lon = double.Parse(pos.Substring(9, 3), System.Globalization.CultureInfo.InvariantCulture) + b.lon / 60;
                             if (pos[17] == 'W') b.lon *= -1;
 
+							if (IsNullOrNine(b.lat, b.lon)) return null;
+
                             prim_or_sec = pos[8];
                             symbol = pos[18];
                             aftertext = pos.Substring(19);
@@ -247,10 +257,16 @@ namespace APRSWebServer
                 }
             }
 
-            public bool PositionIsValid
-            {
-                get { return (lat != 0) && (lon != 0); }
-            }
+			public bool PositionIsValid
+			{
+				get
+				{
+					const double eps = 1e-6;
+					bool zeroZero = Math.Abs(lat) < eps && Math.Abs(lon) < eps;
+					bool nineNine = Math.Abs(Math.Abs(lat) - 9.0) < eps && Math.Abs(Math.Abs(lon) - 9.0) < eps;
+					return !(zeroZero || nineNine);
+				}
+			}
 
             public Buddie(string name, double lat, double lon, short speed, short course)
             {

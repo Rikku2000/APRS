@@ -9,6 +9,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Xml;
 using System.Xml.Serialization;
+using System.Globalization;
 
 namespace APRSForwarder
 {
@@ -62,7 +63,20 @@ namespace APRSForwarder
         public APRSGateWay()
 		{
 		}
-       
+
+		private static readonly Regex UncompressedPos = new Regex(@"[!=@]\s*(\d{2})(\d{2}\.\d{2})([NS]).*?([0-1]\d{2})(\d{2}\.\d{2})([EW])", RegexOptions.Compiled);
+		private static bool IsNullIslandAprs(string line)
+		{
+		   var m = UncompressedPos.Match(line);
+		   if (!m.Success) return false;
+		   int latDeg  = int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture);
+		   double latMin = double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
+		   int lonDeg  = int.Parse(m.Groups[4].Value, CultureInfo.InvariantCulture);
+		   double lonMin = double.Parse(m.Groups[5].Value, CultureInfo.InvariantCulture);
+		   return latDeg == 0 && Math.Abs(latMin) < 1e-6 &&
+				  lonDeg == 0 && Math.Abs(lonMin) < 1e-6;
+		}
+
         public void Start()
         {
 			IniFile file = new IniFile("aprsgateway.ini");
@@ -309,7 +323,8 @@ namespace APRSForwarder
             bool isComment = line.IndexOf("#") == 0;
             if (!isComment)
             {
-                lastRX = line;
+				if (IsNullIslandAprs(line)) return;
+				lastRX = line;
 				Console.WriteLine("[APRS] "+ lastRX);
 				TCPSend (server_out, port_out, lastRX);
                 onPacket(line);

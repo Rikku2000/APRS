@@ -1,11 +1,11 @@
 .leaflet-label {
-	background: #444444;
+	background: var(--panel-2);
 	background-clip: padding-box;
-	border-color: #262626;
+	border-color: var(--bg);
 	border-radius: 2px;
 	border-style: solid;
 	border-width: 1px;
-	color: #ffffff;
+	color: var(--text);
 	display: block;
 	font: 11px/11px Arial, sans-serif;
 	padding: 2px 2px;
