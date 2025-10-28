@@ -402,7 +402,7 @@ namespace APRSWebServer
             lastgeoMutex.WaitOne();
             if (LastPositions.ContainsKey(bud.name))
             {
-                LastPositions[bud.name].lon = bud.lat;
+                LastPositions[bud.name].lat = bud.lat;
                 LastPositions[bud.name].lon = bud.lon;
             }
             else

@@ -4,6 +4,7 @@ using System.Text;
 using System.Windows.Forms;
 using System.Threading;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 
 namespace APRSForwarder
 {
@@ -16,7 +17,7 @@ namespace APRSForwarder
         private bool _autoApply = false;
 
         private TabControl tabs;
-        private TextBox txtLog;
+        private RichTextBox txtLog;
         private Button btnLoad, btnSave, btnStart, btnStop, btnApply;
         private CheckBox cbAuto;
 
@@ -114,14 +115,15 @@ namespace APRSForwarder
 			cbAutostart.Left = 420; cbAutostart.Top = tabs.Bottom + 10; cbAutostart.Width = 110;
 			this.Controls.Add(cbAutostart);
 
-            txtLog = new TextBox();
-            txtLog.Multiline = true; txtLog.ScrollBars = ScrollBars.Both;
-            txtLog.WordWrap = false; txtLog.ReadOnly = true;
-            txtLog.Left = 10; txtLog.Top = btnLoad.Bottom + 10; txtLog.Width = this.ClientSize.Width - 25; txtLog.Height = this.ClientSize.Height - (btnLoad.Bottom + 20);
-            txtLog.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom;
-            this.Controls.Add(txtLog);
+			txtLog = new RichTextBox();
+			txtLog.DetectUrls = false; txtLog.ReadOnly = true; txtLog.HideSelection = false;
+			txtLog.Multiline = true; txtLog.ScrollBars = RichTextBoxScrollBars.None;
+			txtLog.WordWrap = true; txtLog.ReadOnly = true;
+			txtLog.Left = 10; txtLog.Top = btnLoad.Bottom + 10; txtLog.Width = this.ClientSize.Width - 25; txtLog.Height = this.ClientSize.Height - (btnLoad.Bottom + 20);
+			txtLog.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom;
+			this.Controls.Add(txtLog);
 
-            _consoleWriter = new TextBoxWriter(txtLog);
+            _consoleWriter = new TextBoxWriter((RichTextBox)txtLog, this);
             Console.SetOut(_consoleWriter);
             Console.SetError(_consoleWriter);
 
@@ -393,10 +395,31 @@ namespace APRSForwarder
             return string.Empty;
         }
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+		private static extern bool ShowScrollBar(IntPtr hWnd, int wBar, bool bShow);
+
+		public System.Drawing.Color ColorForLine(string line)
+		{
+			if (line == null) return System.Drawing.SystemColors.ControlText;
+
+			string s = line;
+			if (s.IndexOf("[APRS]", StringComparison.OrdinalIgnoreCase) >= 0) return System.Drawing.Color.FromArgb(0, 200, 120);
+			if (s.IndexOf("[MQTT]", StringComparison.OrdinalIgnoreCase) >= 0) return System.Drawing.Color.FromArgb(80, 160, 255);
+			if (s.IndexOf("[FA]", StringComparison.OrdinalIgnoreCase) >= 0 || s.IndexOf("[FlightAware]", StringComparison.OrdinalIgnoreCase) >= 0) return System.Drawing.Color.FromArgb(255, 200, 80);
+			if (s.IndexOf("[DUMP1090]", StringComparison.OrdinalIgnoreCase) >= 0) return System.Drawing.Color.FromArgb(200, 120, 255);
+			if (s.IndexOf("[AIS]", StringComparison.OrdinalIgnoreCase) >= 0 || s.IndexOf("[VesselFinder]", StringComparison.OrdinalIgnoreCase) >= 0) return System.Drawing.Color.FromArgb(80, 220, 220);
+			if (s.IndexOf("[GUI]", StringComparison.OrdinalIgnoreCase) >= 0) return System.Drawing.Color.FromArgb(170, 170, 170);
+			if (s.IndexOf("ERROR", StringComparison.OrdinalIgnoreCase) >= 0) return System.Drawing.Color.FromArgb(255, 90, 90);
+			if (s.IndexOf("WARN", StringComparison.OrdinalIgnoreCase) >= 0) return System.Drawing.Color.FromArgb(255, 210, 90);
+
+			return System.Drawing.SystemColors.ControlText;
+		}
+
         private class TextBoxWriter : System.IO.TextWriter
         {
-            private TextBox _tb;
-            public TextBoxWriter(TextBox tb) { _tb = tb; }
+            private RichTextBox _tb;
+            private APRSGateWayGUI _owner;
+            public TextBoxWriter(RichTextBox tb, APRSGateWayGUI owner) { _tb = tb; _owner = owner; }
             public override Encoding Encoding { get { return Encoding.UTF8; } }
             public override void WriteLine(string value)
             {
@@ -410,7 +433,18 @@ namespace APRSForwarder
             public override void Write(char value) { }
             private void Append(string line)
             {
-                _tb.AppendText(line + Environment.NewLine);
+                System.Drawing.Color col = _owner != null ? _owner.ColorForLine(line) : _tb.ForeColor;
+
+                int start = _tb.TextLength;
+                string text = line + Environment.NewLine;
+                _tb.SelectionStart = start;
+                _tb.SelectionLength = 0;
+                _tb.SelectionColor = col;
+                _tb.AppendText(text);
+                _tb.SelectionColor = _tb.ForeColor;
+                _tb.SelectionStart = _tb.TextLength;
+                _tb.ScrollToCaret();
+
                 if (_tb.Lines != null && _tb.Lines.Length > 10000)
                 {
                     string[] lines = _tb.Lines;
