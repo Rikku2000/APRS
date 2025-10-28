@@ -26,6 +26,10 @@ namespace APRSForwarder
             this.Text = "APRSGateway - Control Panel";
             this.Width = 700; this.Height = 700;
             this.StartPosition = FormStartPosition.CenterScreen;
+			this.MaximizeBox = false;
+			this.FormBorderStyle = FormBorderStyle.FixedSingle;
+			this.SizeGripStyle = SizeGripStyle.Hide;
+			LoadAppIcon();
 
             _iniPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "aprsgateway.ini");
 
@@ -458,6 +462,13 @@ namespace APRSForwarder
                 }
             }
         }
+
+		private void LoadAppIcon() {
+			try {
+				System.Drawing.Icon exeIco = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+				if (exeIco != null) { this.Icon = exeIco; return; }
+			} catch { }
+		}
     }
 
     internal sealed class SimpleIni

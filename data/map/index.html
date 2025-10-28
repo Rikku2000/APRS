@@ -24,6 +24,12 @@
 			<link rel="stylesheet" href="style/custom.css">
 		</head>
 		<body class="w3-theme-dark">
+			<div id="preloader" role="status" aria-live="polite">
+				<div class="loader-ring"></div>
+				<div id="preloaderTitle" style="font-weight:600;margin-bottom:6px;"></div>
+				<div id="preloaderText" style="font-size:13px;opacity:.85;"></div>
+			</div>
+
 			<button id="toggleList" aria-expanded="false">Users</button>
 			<button id="themeToggle">Switch</button>
 			<div class="w3-row">
@@ -59,6 +65,9 @@
 				<div class="w3-center w3-small">- 13MAD86 / Martin -<div class="w3-center w3-tiny">Version 1.0 (BETA)</div></div>
 			</div>
 			<script>
+				document.documentElement.classList.add('preload-lock');
+				document.body.classList.add('preload-lock');
+
 				var hashusr = "";
 
 				function float2int (value) { return value | 0; }
@@ -610,8 +619,7 @@
 
 				var socket = null;
 				var Reconnect = function() { 
-					// var socket_url = 'ws://'+location.hostname+':8060/';
-					var socket_url = 'ws://192.168.0.73:8060/';
+					var socket_url = 'ws://'+location.hostname+':8060/';
 					socket = new WebSocket(socket_url);
 					socket.onopen = function() { };
 					socket.onmessage = function (evt) { UpdateFromWebSocket(evt.data);  };
@@ -668,6 +676,60 @@
 						} catch(e){}
 					};
 				})();
+
+			  (function(){
+				var pre = document.getElementById('preloader');
+				var title = document.getElementById('preloaderTitle');
+				var text  = document.getElementById('preloaderText');
+
+				title.textContent = 'Please wait...';
+
+				function showPreloader(msg1, msg2){
+				  if (!pre) return;
+				  if (msg1) title.textContent = msg1;
+				  if (msg2) text.textContent  = msg2;
+				  pre.hidden = false;
+				}
+				function hidePreloader(){
+				  if (!pre) return;
+				  pre.hidden = true;
+				  setTimeout(function(){
+					document.documentElement.classList.remove('preload-lock');
+					document.body.classList.remove('preload-lock');
+				  }, 400);
+				}
+
+				var firstStatusSeen = false;
+
+				var _UpdateStatus = window.UpdateStatus;
+				window.UpdateStatus = function(){
+				  try { _UpdateStatus(); } catch(e){}
+
+				  try {
+					var count = (typeof marker_cache !== 'undefined' && marker_cache) ? marker_cache.length : 0;
+					if (pre && !firstStatusSeen) {
+					  text.textContent  = 'Loaded ' + count + ' User' + (count===1?'':'s');
+					} else if (pre) {
+					  text.textContent  = 'Loaded ' + count + ' User' + (count===1?'':'s');
+					}
+					firstStatusSeen = true;
+					maybeDone();
+				  } catch(e){}
+				};
+
+				try { map.once('load', maybeDone); } catch(e){}
+
+				function maybeDone(){
+				  if (firstStatusSeen) {
+					setTimeout(hidePreloader, 400);
+				  }
+				}
+
+				setTimeout(function(){
+				  if (!firstStatusSeen) { title.textContent = 'Starting…'; }
+				  if (pre && !pre.hidden) { hidePreloader(); }
+				}, 10000);
+			  })();
 			</script>
 		</body>
 	</html>
