@@ -234,9 +234,6 @@ namespace APRSForwarder
 					Thread.Sleep(backoffMs);
 					backoffMs = Math.Min(backoffMs * 2, 30000);
 				}
-				catch
-				{
-				}
 
 				if (_running)
 				{
@@ -783,9 +780,7 @@ namespace APRSForwarder
 					}
 				}
 			}
-			catch (Exception ex)
-			{
-			}
+			catch (Exception ex) { Exception error = ex; }
 		}
 
 

@@ -1658,10 +1658,7 @@ namespace SimpleServersPBAuth
                 cl.QueryInline = inline;
                 cl.Headers = clHeaders;
             }
-            catch (Exception ex)
-            {
-                
-            };
+            catch (Exception ex) { Exception error = ex; };
 
             GetClientRequest(cl);
         }
@@ -1993,6 +1990,7 @@ namespace SimpleServersPBAuth
             }
             catch (Exception ex)
             {
+				Exception error = ex;
                 return "";
             };
         }
@@ -2044,6 +2042,7 @@ namespace SimpleServersPBAuth
             }
             catch (Exception ex)
             {
+				Exception error = ex;
                 return null;
             };
         }

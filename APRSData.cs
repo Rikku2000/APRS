@@ -178,8 +178,6 @@ namespace APRSWebServer
                             b.lon = double.Parse(pos.Substring(9, 3), System.Globalization.CultureInfo.InvariantCulture) + b.lon / 60;
                             if (pos[17] == 'W') b.lon *= -1;
 
-							if (IsNullOrNine(b.lat, b.lon)) return null;
-
                             prim_or_sec = pos[8];
                             symbol = pos[18];
                             aftertext = pos.Substring(19);
@@ -202,6 +200,10 @@ namespace APRSWebServer
                 default:
                     break;
             };
+
+			if (IsNullOrNine(b.lat, b.lon))
+				return null;
+
             if (line.IndexOf(":>") > 0) b.Status = line.Substring(line.IndexOf(":>") + 2);
             return b;
         }
@@ -386,10 +388,12 @@ namespace APRSWebServer
                 this.speed = b.speed;
                 this.course = b.course;
                 this.alt = b.alt;
+
                 if (!String.IsNullOrEmpty(b.APRS)) this.APRS = b.APRS;
                 if (!IsNullIcon(b.iconSymbol)) this.iconSymbol = b.iconSymbol;
                 if (!String.IsNullOrEmpty(b._comment)) this._comment = b._comment;
                 if (!String.IsNullOrEmpty(b.Status)) this.Status = b.Status;
+
                 this.last = b.last;
             }
         }
