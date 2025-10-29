@@ -77,7 +77,12 @@
 
 				var colors = ['#000000','#592900','#C90000','#FF5900','#EDEB00','#00C900','#0000C9','#FF0094','#00007B','#FFFFFF'];
 
-				var map = L.map('map', {center: [51, 11], zoom: (hashusr == "" ? 7 : 5), zoomControl: false, zoomsliderControl: true});
+				var map = L.map('map', {center: [51, 11], zoom: (hashusr == "" ? 7 : 5), minZoom: 3, zoomControl: false, zoomsliderControl: true, maxBounds: worldBounds, maxBoundsViscosity: 1.0});
+
+				var worldBounds = L.latLngBounds(L.latLng(-85, -180), L.latLng(85, 180));
+				map.setMaxBounds(worldBounds);
+				map.on('drag', function () { map.panInsideBounds(worldBounds, { animate: false }); });
+
 				map.doubleClickZoom.disable();
 				map.on('dblclick', function(e) {
 					UpdateData('MARKER', 'Never', e.latlng.lat.toFixed(7), e.latlng.lng.toFixed(7), 0, 0, '', 0, '/"', 0, '', '');
@@ -115,7 +120,7 @@
 					return tilePoint.multiplyBy(tileSize).subtract(origin);
 				};
 
-				var openstreetmap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 15, attribution: 'Open Street Map', opacity: 0.75 });
+				var openstreetmap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { minZoom: 3, attribution: 'Open Street Map', opacity: 0.75, noWrap: true, continuousWorld: false });
 				openstreetmap.addTo(map);
 				var basemaps = { "Open Street Map": openstreetmap };
 
@@ -320,7 +325,7 @@
 					txt += '<tr><td style="border-bottom: solid 1px #fff;"> '+lat3+' '+lon3+'</td></tr>';
 					txt += '<tr><td width="64">Speed:</td><td style="border-bottom: solid 1px #fff;"> '+speed+' km/h; '+(speed * 0.62137119).toFixed(1)+' mph; '+(speed / 1.852).toFixed(1)+' knots</td></tr>';
 					txt += '<tr><td width="64">Heading:</td><td style="border-bottom: solid 1px #fff;"> '+heading+'&deg; '+HeadingToText(heading)+'</td></tr>';
-					txt += '<tr><td width="64">Comment:</td><td style="border-bottom: solid 1px #fff;">'+comment+'</td></tr>';
+					txt += '<tr><td width="64">Comment:</td><td style="border-bottom: solid 1px #fff; overflow-wrap:anywhere; word-break:break-word; white-space:normal;">'+comment+'</td></tr>';
 					txt += '</div>';
 
 					for(i=0;i<marker_cache.length;i++)
@@ -329,7 +334,7 @@
 					for(i=0;i<marker_cache.length;i++) {
 						if(marker_cache[i].user == user) {
 							var mc = marker_cache[i];
-							txt = '<table style="width:260px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:260px;">' + txt;	
+							txt = '<table style="width:300px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:300px;">' + txt;	
 
 							mc.id = id;
 							mc.age = age;
@@ -385,7 +390,7 @@
 							var mc = marker_cache[i];
 							if (mc.user !== user) { needsListRefresh = true; mc.user = user; }
 
-							txt = '<table style="width:260px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:260px;">';
+							txt = '<table style="width:300px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:300px;">';
 
 							mc.age = age;
 							if(dt != mc.dt) {
@@ -423,7 +428,7 @@
 					var symba = symbolToImage(symbol);
 					var symbolImage = symba[0];
 
-					txt = '<table style="width:260px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:260px;">' + txt;
+					txt = '<table style="width:300px;height:24px;font-size:14px;" celpadding="0" cellspacing="0"><tr><td><b>'+user+'</b> '+(registered ? "&reg;" : "")+'</td><td align="right" style="text-align:right;">'+sipx+'</td></tr></table><div style="width:300px;">' + txt;
 					var mc = {"user":user,"lat":lat,"lon":lon,"heading":heading,"speed":speed,"dt":dt,"id":id,"age":age,"symbol":symbol,"status":status};
 					mc.color = colors[id % 10];
 					mc.follow = false;
