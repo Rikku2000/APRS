@@ -30,6 +30,11 @@ namespace APRSWebServer
         public bool OutConnectionsToConsole = true;
         public bool OutBroadcastsMessages = false;
         public bool OutBuddiesCount = false;
+
+#if SQLITE
+        private APRSStorage _storage = new APRSStorage("aprs.sqlite");
+#endif
+
         public int StoreGPSMaxTime = 1440;
         public int HTTPServer = 0;
         public bool EnableClientFilter = false;
@@ -374,6 +379,11 @@ namespace APRSWebServer
                 cd.lastBuddie = APRSData.ParseAPRSPacket(line);
                 cd.lastBuddie.Verified = cd.validated;
                 cd.lastBuddie.Owner = cd.user == cd.lastBuddie.name;
+
+#if SQLITE
+                try { _storage.SavePacket(line, cd.lastBuddie, cd.IP, cd.validated, cd.lastBuddie.Owner); } catch {};
+#endif
+
             }
             catch { };                        
 

@@ -15,6 +15,11 @@ using System.Security.Cryptography;
 using System.Runtime.InteropServices;
 using System.Reflection;
 
+#if SQLITE
+using System.Data;
+using System.Data.SQLite;
+#endif
+
 namespace APRSWebServer
 {
     public class HttpAPRSServer : SimpleServersPBAuth.ThreadedHttpServer
@@ -39,6 +44,58 @@ namespace APRSWebServer
             if (!HttpClientWebSocketInit(Request, false))
                 PassFileToClientByRequest(Request, GetCurrentDir() + @"\map");
         }
+
+#if SQLITE
+		private IEnumerable<string> GetLatestPositionsFromDb(string dbPath = "aprs.sqlite", int limit = 2000)
+		{
+			var rows = new List<string>();
+			if (!File.Exists(dbPath)) return rows;
+
+			const string sql = @"
+			WITH latest AS (
+				SELECT callsign, MAX(recv_utc) AS recv_utc
+				FROM positions
+				GROUP BY callsign
+			)
+			SELECT p.recv_utc, p.callsign, p.lat, p.lon, p.course, p.speed, p.symbol
+			FROM positions p
+			JOIN latest l ON l.callsign = p.callsign AND l.recv_utc = p.recv_utc
+			ORDER BY p.recv_utc DESC
+			LIMIT @lim;";
+
+			using (var conn = new SQLiteConnection("Data Source={dbPath};Read Only=True;"))
+			{
+				conn.Open();
+				using (var cmd = new SQLiteCommand(sql, conn))
+				{
+					cmd.Parameters.AddWithValue("@lim", limit);
+					using (var rd = cmd.ExecuteReader(CommandBehavior.CloseConnection))
+					{
+						while (rd.Read())
+						{
+							DateTime dt = DateTime.SpecifyKind(DateTime.Parse(rd.GetString(0)), DateTimeKind.Utc);
+							string when = dt.ToString("HH:mm:ss dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
+
+							string call   = (rd.IsDBNull(1) ? "" : rd.GetString(1)).ToUpperInvariant();
+							double lat    = rd.GetDouble(2);
+							double lon    = rd.GetDouble(3);
+							int course    = rd.IsDBNull(4) ? 0 : rd.GetInt32(4);
+							int speed     = rd.IsDBNull(5) ? 0 : rd.GetInt32(5);
+							string symbol = rd.IsDBNull(6) ? "//" : rd.GetString(6);
+
+							string line = string.Format(
+								System.Globalization.CultureInfo.InvariantCulture,
+								"{0} UTC {1} >> {2:000.0000000} {3:000.0000000} {4:00000.00} {5} {6} {7}",
+								when, call, lat, lon, 0.0, course, speed, symbol);
+
+							rows.Add(line);
+						}
+					}
+				}
+			}
+			return rows;
+		}
+#endif
 
         private void OutStatistics(ClientRequest clReq)
         {
@@ -104,10 +161,25 @@ namespace APRSWebServer
             if (aprsServer.OutConnectionsToConsole)
                 Console.WriteLine("WebSocket connected from: {0}:{1}, total {2}", clientRequest.RemoteIP, ((IPEndPoint)clientRequest.Client.Client.RemoteEndPoint).Port, wsClients.Count);
 
+#if SQLITE
+			if (aprsServer.StoreGPSInMemory) {
+				PassBuds(clientRequest);
+			} else {
+				foreach (var line in GetLatestPositionsFromDb("aprs.sqlite", 2000)) {
+					var payload = GetWebSocketFrameFromString(line + "\r\n");
+					try {
+						clientRequest.Client.GetStream().Write(payload, 0, payload.Length);
+						clientRequest.Client.GetStream().Flush();
+					} catch { }
+				}
+			}
+#else
             PassBuds(clientRequest);
 
             if ((aprsServer.OutBroadcastsMessages) && (aprsServer.BUDs.Count > 0))
                 Console.WriteLine("Passed {0} buddies to WS {1}:{2}", aprsServer.BUDs.Count, clientRequest.RemoteIP, ((IPEndPoint)clientRequest.Client.Client.RemoteEndPoint).Port);
+#endif
+
         }
 
         protected override void OnWebSocketClientDisconnected(ClientRequest clientRequest)
