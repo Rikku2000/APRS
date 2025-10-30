@@ -64,11 +64,32 @@ namespace APRSWebServer
                     "  course INTEGER, " +
                     "  speed INTEGER, " +
                     "  symbol TEXT, " +
+					"  comment TEXT, " +
                     "  validated INTEGER NOT NULL" +
                     "); " +
                     "CREATE INDEX IF NOT EXISTS idx_positions_call_time ON positions(callsign, recv_utc DESC); " +
                     "CREATE INDEX IF NOT EXISTS idx_positions_time ON positions(recv_utc);";
                 cmd.ExecuteNonQuery();
+				try {
+					bool hasComment = false;
+					using (var check = _conn.CreateCommand())
+					{
+						check.CommandText = "PRAGMA table_info(positions);";
+						using (var rd = check.ExecuteReader())
+						{
+							while (rd.Read()) {
+								if (string.Compare(rd["name"].ToString(), "comment", true) == 0) { hasComment = true; break; }
+							}
+						}
+					}
+					if (!hasComment) {
+						using (var alter = _conn.CreateCommand())
+						{
+							alter.CommandText = "ALTER TABLE positions ADD COLUMN comment TEXT;";
+							alter.ExecuteNonQuery();
+						}
+					}
+				} catch { }
             }
 
             _writer = new Thread(Writer);
@@ -131,9 +152,9 @@ namespace APRSWebServer
                     {
                         using (var cmd2 = conn.CreateCommand())
                         {
-                            cmd2.CommandText =
-                                "INSERT INTO positions(packet_id, recv_utc, callsign, lat, lon, course, speed, symbol, validated) " +
-                                "VALUES (@pid,@t,@c,@lat,@lon,@crs,@spd,@sym,@v);";
+							cmd2.CommandText =
+								"INSERT INTO positions(packet_id, recv_utc, callsign, lat, lon, course, speed, symbol, comment, validated) " +
+								"VALUES (@pid,@t,@c,@lat,@lon,@crs,@spd,@sym,@comment,@v);";
                             cmd2.Parameters.AddWithValue("@pid", packetId);
                             cmd2.Parameters.AddWithValue("@t", now);
                             cmd2.Parameters.AddWithValue("@c", (object)(budOrNull.name ?? callsign ?? string.Empty));
@@ -143,8 +164,9 @@ namespace APRSWebServer
                             cmd2.Parameters.AddWithValue("@crs", (budOrNull.course != 0) ? (object)budOrNull.course : DBNull.Value);
                             cmd2.Parameters.AddWithValue("@spd", (budOrNull.speed  != 0) ? (object)budOrNull.speed  : DBNull.Value);
 
-                            cmd2.Parameters.AddWithValue("@sym", (object)(budOrNull.iconSymbol ?? string.Empty));
-                            cmd2.Parameters.AddWithValue("@v", validated ? 1 : 0);
+							cmd2.Parameters.AddWithValue("@sym", (object)(budOrNull.iconSymbol ?? string.Empty));
+							cmd2.Parameters.AddWithValue("@comment", (object)(budOrNull.Comment ?? string.Empty));
+							cmd2.Parameters.AddWithValue("@v", validated ? 1 : 0);
                             cmd2.ExecuteNonQuery();
                         }
                     }

@@ -1357,6 +1357,7 @@ namespace SimpleServersPBAuth
         }
         protected string _serverName = "SimpleServersPBAuth Basic HttpServer v0.2B";
 
+#if SQLITE
         public string APRSDatabaseFile
         {
             get { return _aprsdatabasefile; }
@@ -1372,6 +1373,7 @@ namespace SimpleServersPBAuth
             }
         }
         protected string _aprsdatabasefile = "";
+#endif
 
         public virtual bool OnlyHTTPClients { get { return _OnlyHTTP; } set { _OnlyHTTP = value; } }
         protected bool _OnlyHTTP = true;

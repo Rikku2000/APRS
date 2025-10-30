@@ -58,7 +58,7 @@ namespace APRSWebServer
 				FROM positions
 				GROUP BY callsign
 			)
-			SELECT p.recv_utc, p.callsign, p.lat, p.lon, p.course, p.speed, p.symbol
+			SELECT p.recv_utc, p.callsign, p.lat, p.lon, p.course, p.speed, p.symbol, p.comment
 			FROM positions p
 			JOIN latest l ON l.callsign = p.callsign AND l.recv_utc = p.recv_utc
 			ORDER BY p.recv_utc DESC
@@ -84,10 +84,11 @@ namespace APRSWebServer
 							int speed     = rd.IsDBNull(5) ? 0 : Convert.ToInt32(rd.GetValue(5), CultureInfo.InvariantCulture);
 							string symbol = rd.IsDBNull(6) ? "//" : rd.GetString(6);
 
+							string cmt = rd.IsDBNull(7) ? "" : rd.GetString(7);
 							string line = string.Format(
 								CultureInfo.InvariantCulture,
-								"{0} UTC {1} >> {2:000.0000000} {3:000.0000000} {4:00000.00} {5} {6} {7}",
-								when, call, lat, lon, 0.0, course, speed, symbol);
+								"{0} UTC {1} >> {2:000.0000000} {3:000.0000000} {4:00000.00} {5} {6} {7} {8}",
+								when, call, lat, lon, 0.0, course, speed, symbol, cmt);
 
 							rows.Add(line);
 						}
