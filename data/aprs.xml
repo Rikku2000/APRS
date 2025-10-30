@@ -11,6 +11,8 @@
 	<!-- APRS Server, Outgoing Data -->
 	<EnableClientFilter>1</EnableClientFilter> <!-- Enable filter for clients; 0 - No, 1 - Yes; default 0 -->
 	<PassBackAPRSPackets>1</PassBackAPRSPackets> <!-- Pass APRS Packets back to sender; 0 - No, 1 - Yes; default 0 -->
+
+	<APRSDatabaseFile>aprs.sqlite</APRSDatabaseFile> <!-- APRS Database File -->
 	
 	<!-- APRS Server, Incoming Data -->
 	<OnlyValidPasswordUsers>0</OnlyValidPasswordUsers> <!-- Allow to connect only users with correct password, 0 - No, 1 - Yes; default 0 -->
@@ -18,7 +20,7 @@
 	<PassDataOnlyLoggedUser>0</PassDataOnlyLoggedUser> <!-- Broadcast packets only if packet sender is a logged aprs user, 0 - No, 1 - Yes; default 0 -->
 	
 	<!-- Buffering - Store GPS in Memory -->
-	<StoreGPSInMemory>1</StoreGPSInMemory> <!-- Store GPS Information in Memory; 0 - no store, 1 - store in; default 0 -->
+	<StoreGPSInMemory>0</StoreGPSInMemory> <!-- Store GPS Information in Memory; 0 - no store, 1 - store in; default 0 -->
 	<StoreGPSMaxTime>1440</StoreGPSMaxTime> <!-- Store GPS Information Max Time; in minutes max store time; default 1440 -->
 	
 	<!-- APRS Server, User/Callsign Filter -->	

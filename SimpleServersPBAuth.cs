@@ -1357,6 +1357,22 @@ namespace SimpleServersPBAuth
         }
         protected string _serverName = "SimpleServersPBAuth Basic HttpServer v0.2B";
 
+        public string APRSDatabaseFile
+        {
+            get { return _aprsdatabasefile; }
+            set
+            {
+                _aprsdatabasefile = value;
+                _headers_mutex.WaitOne();
+                if (_headers.ContainsKey("APRS-DDatabase-File"))
+                    _headers["APRS-DDatabase-File"] = _aprsdatabasefile;
+                else
+                    _headers.Add("APRS-DDatabase-File", _aprsdatabasefile);
+                _headers_mutex.ReleaseMutex();
+            }
+        }
+        protected string _aprsdatabasefile = "";
+
         public virtual bool OnlyHTTPClients { get { return _OnlyHTTP; } set { _OnlyHTTP = value; } }
         protected bool _OnlyHTTP = true;
         public uint MaxClientHeaderSize { get { return _MaxHeaderSize; } set { _MaxHeaderSize = value; } }

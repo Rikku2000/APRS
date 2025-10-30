@@ -32,7 +32,7 @@ namespace APRSWebServer
         public bool OutBuddiesCount = false;
 
 #if SQLITE
-        private APRSStorage _storage = new APRSStorage("aprs.sqlite");
+        private APRSStorage _storage;
 #endif
 
         public int StoreGPSMaxTime = 1440;
@@ -75,6 +75,11 @@ namespace APRSWebServer
         {
             this.ServerName = "APRSWebServer";
             this.ListenPort = 14580;
+
+#if SQLITE
+            this.APRSDatabaseFile = "aprs.sqlite";
+#endif
+
             this.ListenIPAllow = new string[0];
             string fName = SimpleServersPBAuth.TTCPServer.GetCurrentDir() + @"\aprs.xml";
             XmlDocument xd = new XmlDocument();
@@ -139,6 +144,10 @@ namespace APRSWebServer
             {
                 httpServer = new HttpAPRSServer(this, HTTPServer);
                 httpServer.ServerName = this.ServerName;
+#if SQLITE
+				_storage = new APRSStorage(this.APRSDatabaseFile);
+                httpServer.APRSDatabaseFile = this.APRSDatabaseFile;
+#endif
                 httpServer.AllowBrowseFiles = true;
                 httpServer.ListenIPMode = this.ListenIPMode;
                 httpServer.ListenIPAllow = this.ListenIPAllow;

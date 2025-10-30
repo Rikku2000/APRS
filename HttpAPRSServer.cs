@@ -18,6 +18,7 @@ using System.Reflection;
 #if SQLITE
 using System.Data;
 using System.Data.SQLite;
+using System.Globalization;
 #endif
 
 namespace APRSWebServer
@@ -46,7 +47,7 @@ namespace APRSWebServer
         }
 
 #if SQLITE
-		private IEnumerable<string> GetLatestPositionsFromDb(string dbPath = "aprs.sqlite", int limit = 2000)
+		private IEnumerable<string> GetLatestPositionsFromDb(string dbPath, int limit)
 		{
 			var rows = new List<string>();
 			if (!File.Exists(dbPath)) return rows;
@@ -63,7 +64,7 @@ namespace APRSWebServer
 			ORDER BY p.recv_utc DESC
 			LIMIT @lim;";
 
-			using (var conn = new SQLiteConnection("Data Source={dbPath};Read Only=True;"))
+			using (var conn = new SQLiteConnection(string.Format("Data Source={0};Read Only=True;", dbPath)))
 			{
 				conn.Open();
 				using (var cmd = new SQLiteCommand(sql, conn))
@@ -73,18 +74,18 @@ namespace APRSWebServer
 					{
 						while (rd.Read())
 						{
-							DateTime dt = DateTime.SpecifyKind(DateTime.Parse(rd.GetString(0)), DateTimeKind.Utc);
-							string when = dt.ToString("HH:mm:ss dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture);
+							DateTime dt = DateTime.SpecifyKind(DateTime.Parse(rd.GetString(0), CultureInfo.InvariantCulture), DateTimeKind.Utc);
+							string when = dt.ToString("HH:mm:ss dd.MM.yyyy", CultureInfo.InvariantCulture);
 
-							string call   = (rd.IsDBNull(1) ? "" : rd.GetString(1)).ToUpperInvariant();
+							string call   = rd.IsDBNull(1) ? "" : rd.GetString(1).ToUpperInvariant();
 							double lat    = rd.GetDouble(2);
 							double lon    = rd.GetDouble(3);
-							int course    = rd.IsDBNull(4) ? 0 : rd.GetInt32(4);
-							int speed     = rd.IsDBNull(5) ? 0 : rd.GetInt32(5);
+							int course    = rd.IsDBNull(4) ? 0 : Convert.ToInt32(rd.GetValue(4), CultureInfo.InvariantCulture);
+							int speed     = rd.IsDBNull(5) ? 0 : Convert.ToInt32(rd.GetValue(5), CultureInfo.InvariantCulture);
 							string symbol = rd.IsDBNull(6) ? "//" : rd.GetString(6);
 
 							string line = string.Format(
-								System.Globalization.CultureInfo.InvariantCulture,
+								CultureInfo.InvariantCulture,
 								"{0} UTC {1} >> {2:000.0000000} {3:000.0000000} {4:00000.00} {5} {6} {7}",
 								when, call, lat, lon, 0.0, course, speed, symbol);
 
@@ -165,7 +166,7 @@ namespace APRSWebServer
 			if (aprsServer.StoreGPSInMemory) {
 				PassBuds(clientRequest);
 			} else {
-				foreach (var line in GetLatestPositionsFromDb("aprs.sqlite", 2000)) {
+				foreach (var line in GetLatestPositionsFromDb(APRSDatabaseFile, 2000)) {
 					var payload = GetWebSocketFrameFromString(line + "\r\n");
 					try {
 						clientRequest.Client.GetStream().Write(payload, 0, payload.Length);
