@@ -11,11 +11,15 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyProduct("APRSServer")]
 [assembly: Guid("c298c671-b64f-4204-a7d1-edccdb7c02ea")]
 #endif
-[assembly: AssemblyDescription("")]
+#if APRSGATEWAY
+[assembly: AssemblyDescription("APRSGateway")]
+#else
+[assembly: AssemblyDescription("APRSServer")]
+#endif
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
-[assembly: AssemblyCopyright("")]
-[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCompany("openAPRS")]
+[assembly: AssemblyCopyright("13MAD86 / Martin D.")]
+[assembly: AssemblyTrademark("openAPRS")]
 [assembly: AssemblyCulture("")]
 [assembly: ComVisible(false)]
 [assembly: AssemblyVersion("1.0.0.0")]

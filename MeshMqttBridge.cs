@@ -765,7 +765,7 @@ namespace APRSForwarder
 
 				if (sendPos)
 				{
-					string commentOut = (posComment + " " + _commentSuffix).Trim();
+					string commentOut = SanitizeAscii((posComment + " " + _commentSuffix).Trim(), 67);
 					string line = BuildAprsPositionLine(callsign, lat, lon, _symbol, commentOut);
 					Console.WriteLine("[MQTT] DATA " + line);
 					_gw.TCPSend("ignored", 0, line);
@@ -928,20 +928,38 @@ namespace APRSForwarder
             return (ssid > 0) ? (baseCall + "-" + ssid.ToString()) : baseCall;
         }
 
-		private static string SanitizeAscii(string s, int maxLen)
+		private static string StripWeirdNulls(string s)
 		{
-			if (s == null) return "";
-			StringBuilder sb = new StringBuilder(s.Length);
-			int i;
-			for (i = 0; i < s.Length; i++)
+			if (string.IsNullOrEmpty(s)) return s;
+			s = s.Replace("\0", "");
+			s = System.Text.RegularExpressions.Regex.Replace(s, @"\\[uU]0000", "");
+			return s;
+		}
+
+		private static string SanitizeAscii(string s, int maxLen = 67)
+		{
+			if (string.IsNullOrEmpty(s)) return s;
+			s = StripWeirdNulls(s);
+			var sb = new System.Text.StringBuilder(s.Length);
+			bool prevSpace = false;
+			foreach (var ch in s)
 			{
-				char c = s[i];
-				if (c >= 32 && c <= 126) sb.Append(c);
-				else sb.Append(' ');
-				if (sb.Length >= maxLen) break;
+				if (ch >= 32 && ch <= 126)
+				{
+					char outc = ch;
+					if (char.IsWhiteSpace(outc)) { outc = ' '; }
+					if (outc == ' ')
+					{
+						if (prevSpace) continue;
+						prevSpace = true;
+					}
+					else prevSpace = false;
+					sb.Append(outc);
+				}
 			}
-			string outp = sb.ToString().Trim();
-			return outp;
+			var outStr = sb.ToString().Trim();
+			if (outStr.Length > maxLen) outStr = outStr.Substring(0, maxLen);
+			return outStr;
 		}
 
 		private static string BuildAprsMessageLine(string from, string to, string text)
