@@ -1,0 +1,7 @@
+.leaflet-container .leaflet-control-mouseposition {
+  background: var(--panel-2);
+  padding: 3px 3px;
+  margin:0;
+  color: var(--text);
+  font: 11px/11px Arial, sans-serif;
+}
