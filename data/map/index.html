@@ -1,4 +1,4 @@
-﻿<!DOCTYPE HTML>
+<!DOCTYPE HTML>
 	<html lang="en-US">
 		<head>
 			<title>APRS-Server</title>
@@ -34,9 +34,6 @@
 
 			<button id="toggleList" aria-expanded="false">Users</button>
 			<button id="themeToggle">Switch</button>
-			<div id="heatToggle" class="heat-toggle">
-				<label><input id="heatSwitch" type="checkbox"> Heatmap</label>
-			</div>
 			<div class="w3-row">
 				<div class="w3-col m8">
 					<div id="map" style="position:relative; color: #000000; width: 100%; min-height: 100vh; height: 100vh; max-height: 100vh; z-index:0;">
@@ -850,64 +847,103 @@
 				}, 10000);
 			  })();
 
-			(function(){
-			  if (!window.L || !L.heatLayer) { console.warn('Leaflet.heat not loaded'); return; }
+			function setMarkersHidden(hidden){
+			  var mc = window.marker_cache || [];
+			  for (var i = 0; i < mc.length; i++){
+				var m = mc[i]; if (!m) continue;
 
-			  if (!window.heatLayer) window.heatLayer = L.heatLayer([], { radius:22, blur:16, maxZoom:18, minOpacity:0.5 });
-
-			  var toggleBox = document.getElementById('heatToggle');
-			  var heatSwitchEl = document.getElementById('heatSwitch');
-			  if (toggleBox && !toggleBox.__shown) { toggleBox.style.display='block'; toggleBox.__shown = true; }
-
-			  var _heatRebuildTimer = null;
-			  function scheduleHeatRebuild(){
-				if (_heatRebuildTimer) clearTimeout(_heatRebuildTimer);
-				_heatRebuildTimer = setTimeout(rebuildHeatFromMarkers, 200);
-			  }
-
-			  function rebuildHeatFromMarkers(){
-				if (!window.map || !window.heatLayer) return;
-				var pts = [];
-				var mc = window.marker_cache || [];
-				for (var i = 0; i < mc.length; i++){
-				  var m = mc[i];
-				  if (!m) continue;
-				  var lat = parseFloat(m.lat), lon = parseFloat(m.lon);
-				  if (!isFinite(lat) || !isFinite(lon)) continue;
-
-				  var w = 0.6;
-				  if (m.speed != null) {
-					var sp = parseFloat(m.speed);
-					if (isFinite(sp)) w = sp > 120 ? 0.9 : (sp > 60 ? 0.75 : 0.6);
-				  }
-
-				  pts.push([lat, lon, w]);
+				if (m.marker && m.marker.setOpacity) {
+				  m.marker.setOpacity(hidden ? 0 : 1);
 				}
-				window.heatLayer.setLatLngs(pts);
-			  }
 
-			  if (heatSwitchEl && !heatSwitchEl.__wired){
-				heatSwitchEl.__wired = true;
-				heatSwitchEl.addEventListener('change', function(){
-				  if (!window.map || !window.heatLayer) return;
-				  if (heatSwitchEl.checked) {
-					window.heatLayer.addTo(map);
-					rebuildHeatFromMarkers();
-				  } else {
-					map.removeLayer(window.heatLayer);
+				try {
+				  if (m.marker && m.marker.hideLabel && m.marker.showLabel) {
+					if (hidden) m.marker.hideLabel(); else m.marker.showLabel();
 				  }
-				});
-			  }
+				} catch(_) {}
 
-			  if (typeof window.UpdateFromWebSocket === 'function' && !window.__heatMarkersWrapped){
-				window.__heatMarkersWrapped = true;
-				var __oldU = window.UpdateFromWebSocket;
-				window.UpdateFromWebSocket = function(line){
-				  var r = __oldU.apply(this, arguments);
-				  try { if (heatSwitchEl && heatSwitchEl.checked) scheduleHeatRebuild(); } catch(e){}
-				  return r;
-				};
+				try {
+				  if (m.line) {
+					if (hidden && map.hasLayer(m.line)) map.removeLayer(m.line);
+					if (!hidden && !map.hasLayer(m.line)) m.line.addTo(map);
+				  }
+				} catch(_) {}
 			  }
+			}
+
+			(function(){
+				if (!window.L || !L.heatLayer) return;
+
+				if (!window.heatLayer)
+					window.heatLayer = L.heatLayer([], { radius:22, blur:16, maxZoom:18, minOpacity:0.5 });
+
+				function rebuildHeatFromMarkers(){
+					if (!window.map || !window.heatLayer) return;
+					var mc = window.marker_cache || [];
+					var pts = [];
+					for (var i = 0; i < mc.length; i++){
+						var m = mc[i]; if (!m) continue;
+						var lat = parseFloat(m.lat), lon = parseFloat(m.lon);
+						if (!isFinite(lat) || !isFinite(lon)) continue;
+
+						var w = 0.6;
+						if (m.speed != null) {
+							var sp = parseFloat(m.speed);
+							if (isFinite(sp)) w = sp > 120 ? 0.9 : (sp > 60 ? 0.75 : 0.6);
+						}
+						pts.push([lat, lon, w]);
+					}
+					window.heatLayer.setLatLngs(pts);
+					try { window.heatLayer.bringToFront(); } catch(e){}
+				}
+
+				function heatAllowed(){
+					if (!window.map) return false;
+					var z = map.getZoom();
+					return z >= 3 && z <= 5;
+				}
+
+				function ensureHeatVisibility(){
+					if (!window.map || !window.heatLayer) return;
+					if (heatAllowed()) {
+						if (!map.hasLayer(window.heatLayer)) {
+							window.heatLayer.addTo(map);
+							rebuildHeatFromMarkers();
+						} else {
+							rebuildHeatFromMarkers();
+						}
+						setMarkersHidden(true);
+					} else {
+						if (map.hasLayer(window.heatLayer)) map.removeLayer(window.heatLayer);
+						setMarkersHidden(false);
+					}
+				}
+
+				var _heatTimer = null;
+				function scheduleHeatRebuild(){
+					if (_heatTimer) clearTimeout(_heatTimer);
+					_heatTimer = setTimeout(function(){
+						if (heatAllowed()) rebuildHeatFromMarkers();
+					}, 200);
+				}
+
+				if (typeof window.UpdateFromWebSocket === 'function' && !window.__heatZoomWrapped){
+					window.__heatZoomWrapped = true;
+					var __oldU = window.UpdateFromWebSocket;
+					window.UpdateFromWebSocket = function(){
+						var r = __oldU.apply(this, arguments);
+						scheduleHeatRebuild();
+						return r;
+					};
+				}
+
+				if (window.map && !window.__heatZoomHooked){
+					window.__heatZoomHooked = true;
+					map.on('zoomend', ensureHeatVisibility);
+				}
+
+				if (window.map) ensureHeatVisibility();
+				else setTimeout(ensureHeatVisibility, 400);
 			})();
 			</script>
 		</body>
