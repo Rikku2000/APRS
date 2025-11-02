@@ -516,6 +516,42 @@
 					};
 				}
 
+				var APRS_RX = /^(\d{1,2}:\d{1,2}:\d{1,2}\s\d{1,2}\.\d{1,2}\.\d{2,4}\sUTC)\s(\S+)\s>>\s(-?\d+(?:\.\d+)?)\s(-?\d+(?:\.\d+)?)\s([\d.\-]+)\s(\d+)\s(\d+)\s(\S\S)/;
+
+				function isRealAprsLine(s){
+					var m = APRS_RX.exec(s);
+					if (!m) return false;
+					var lat = parseFloat(m[3]), lon = parseFloat(m[4]);
+					if (!isFinite(lat) || !isFinite(lon)) return false;
+					if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return false;
+					return true;
+				}
+
+				var userdata_total = 0;
+				function loadUserdataThenConnect(done){
+					fetch("/userdata", { cache: "no-store" }).then(function(r){ return r.text(); }).then(function(text){
+						userdata_total = 0;
+						if (text && text.indexOf("UTC") !== -1) {
+							var lines = text.split(/\r?\n/);
+							(function applyBatch(i){
+								var end = Math.min(i + 2000, lines.length);
+								for (var k = i; k < end; k++) {
+									var ln = lines[k];
+									if (!ln) continue;
+									if (isRealAprsLine(ln))
+										userdata_total++;
+								}
+								if (end < lines.length)
+									setTimeout(function(){ applyBatch(end); }, 8);
+								else
+									if (typeof done === "function") done();
+							})(0);
+						} else {
+							if (typeof done === "function") done();
+						}
+					}).catch(function(){ if (typeof done === "function") done(); });
+				}
+
 				var UpdateStatus = function() {
 					var html = '<input class="w3-input w3-border w3-round-large" type="text" id="Locate" onkeyup="onLocate(event)" placeholder="Locate / Callsign" value="'+hashusr+'"></input></br>';
 					html += '<a class="w3-button w3-theme-button w3-hover-theme-button w3-round-large" style="text-decoration:none;" href="#" onclick="onReset(event)">Reset</a> ';
@@ -539,30 +575,33 @@
 
 					try { document.getElementById('sourceFilter').value = currentFilter; } catch(e){}
 
-					var uinfo = ' <b>'+ (marker_cache.length) +'</b>';
-					$("#userinfo").html(uinfo);
-
 					var string1 = "0", string2 = "0", result = "0";
 
 					var table_row = 'w3-theme-dark', udt = '', ulist = '';
-					var displayCount = 0;
+					var displayCount = 0, displayMSGCount = 0;
 					if (marker_cache.length > 0) {
 						for (i = marker_cache.length - 1; i >= 0; i--) {
 						    if (!markerMatchesFilter(marker_cache[i])) continue;
 								displayCount++;
 
-							if (table_row == "w3-theme-table")
-								table_row = "w3-theme-dark";
-							else
-								table_row = "w3-theme-table";
+							if (i > (userdata_total * 0.9)) {
+								displayMSGCount++;
 
-							if (marker_cache[i].dt.toString() != udt.toString())
-								ulist += '<tr class="w3-border-bottom w3-theme-light"><td colspan="3"><b class="w3-tiny">'+ marker_cache[i].dt +'</b></td></tr>';
-							ulist += '<tr class="'+ table_row +'">';
-							ulist += '<td class="w3-border-bottom" style="width: 10%;">'+ (i + 1) +'</td>';
-							ulist += '<td class="w3-border-bottom" style="width: 90%;"><div><a class="w3-hover-theme-dark w3-hover-text-theme" style="text-decoration: none;" href="#" onclick="Locate(\''+ marker_cache[i].user +'\');return false;"><div class="w3-image" style="float: left; '+ marker_cache[i].tableicon +'; height: 24px; width: 24px;"></div> <b>'+ marker_cache[i].user +'</b></a> | <small>Position: '+ marker_cache[i].lat +' / '+ marker_cache[i].lon +'</small></div></br><small>'+ marker_cache[i].comment +'</small></td>';
-							ulist += '</tr>';
-							udt = marker_cache[i].dt;
+								if (table_row == "w3-theme-table")
+									table_row = "w3-theme-dark";
+								else
+									table_row = "w3-theme-table";
+
+								if (marker_cache[i].dt.toString() != udt.toString())
+									ulist += '<tr class="w3-border-bottom w3-theme-light"><td colspan="3"><b class="w3-tiny">'+ marker_cache[i].dt +'</b></td></tr>';
+
+								ulist += '<tr class="'+ table_row +'">';
+								ulist += '<td class="w3-border-bottom" style="width: 10%;">'+ (displayMSGCount) +'</td>';
+								ulist += '<td class="w3-border-bottom" style="width: 90%;"><div><a class="w3-hover-theme-dark w3-hover-text-theme" style="text-decoration: none;" href="#" onclick="Locate(\''+ marker_cache[i].user +'\');return false;"><div class="w3-image" style="float: left; '+ marker_cache[i].tableicon +'; height: 24px; width: 24px;"></div> <b>'+ marker_cache[i].user +'</b></a> | <small>Position: '+ marker_cache[i].lat +' / '+ marker_cache[i].lon +'</small></div></br><small>'+ marker_cache[i].comment +'</small></td>';
+								ulist += '</tr>';
+
+								udt = marker_cache[i].dt;
+							}
 						}
 					} else {
 						ulist = '<tr><td colspan="3">NONE</td></tr>';
@@ -693,13 +732,16 @@
 					var socket_url = 'ws://'+location.hostname+':8060/';
 					socket = new WebSocket(socket_url);
 					socket.onopen = function() { };
-					socket.onmessage = function (evt) { UpdateFromWebSocket(evt.data);  };
+					socket.onmessage = function (evt) {
+						UpdateFromWebSocket(evt.data);
+					};
 					socket.onclose = function() { 
 						alert('Connection with server has been lost!\r\nPlease reload page to connect again\r\nor just click OK button to try'); 
 						Reconnect();
 					};
 				};
-				Reconnect();
+
+				loadUserdataThenConnect(function(){ Reconnect(); });
 
 				function iss_fetch_data () {
 					fetch("https://api.wheretheiss.at/v1/satellites/25544").then((response) => response.json()).then((iss) => {

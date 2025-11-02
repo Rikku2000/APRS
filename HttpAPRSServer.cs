@@ -54,11 +54,75 @@ namespace APRSWebServer
 
         protected override void GetClientRequest(ClientRequest Request)
         {
-            if (Request.Query.StartsWith("/statistics"))
-            {
+            if (Request.Query.StartsWith("/statistics")) {
                 OutStatistics(Request);
                 return;
             };
+
+			if (Request.Query.StartsWith("/admin")) {
+				OutAdmin(Request);
+				return;
+			}
+
+#if SQLITE
+			if (Request.Query == "/userdata")
+			{
+				try
+				{
+					var lines = new List<string>();
+
+					const string sql = @"
+					WITH latest AS (
+						SELECT callsign, MAX(recv_utc) AS recv_utc
+						FROM positions
+						GROUP BY callsign
+					)
+					SELECT p.recv_utc, p.callsign, p.lat, p.lon, p.course, p.speed, p.symbol, p.comment
+					FROM positions p
+					JOIN latest l ON l.callsign = p.callsign AND l.recv_utc = p.recv_utc
+					ORDER BY p.recv_utc DESC;";
+
+					using (var conn = new SQLiteConnection(string.Format("Data Source={0};Read Only=True;", "aprs.sqlite")))
+					{
+						conn.Open();
+						using (var cmd = new SQLiteCommand(sql, conn))
+						using (var rd = cmd.ExecuteReader(CommandBehavior.CloseConnection))
+						{
+							while (rd.Read())
+							{
+								var dt = DateTime.SpecifyKind(DateTime.Parse(rd.GetString(0), CultureInfo.InvariantCulture), DateTimeKind.Utc);
+								string when = dt.ToString("HH:mm:ss dd.MM.yyyy", CultureInfo.InvariantCulture);
+
+								string call   = rd.IsDBNull(1) ? "" : rd.GetString(1).ToUpperInvariant();
+								double lat    = rd.GetDouble(2);
+								double lon    = rd.GetDouble(3);
+								int course    = rd.IsDBNull(4) ? 0 : Convert.ToInt32(rd.GetValue(4), CultureInfo.InvariantCulture);
+								int speed     = rd.IsDBNull(5) ? 0 : Convert.ToInt32(rd.GetValue(5), CultureInfo.InvariantCulture);
+								string symbol = rd.IsDBNull(6) ? "//" : rd.GetString(6);
+								string cmt    = rd.IsDBNull(7) ? "" : rd.GetString(7).Replace("\r"," ").Replace("\n"," ");
+
+								string line = string.Format(
+									CultureInfo.InvariantCulture,
+									"{0} UTC {1} >> {2:000.0000000} {3:000.0000000} {4:00000.00} {5} {6} {7} {8}",
+									when, call, lat, lon, 0.0, course, speed, symbol, cmt);
+
+								lines.Add(line);
+							}
+						}
+					}
+
+					this.Headers["Content-type"] = "text/plain; charset=utf-8";
+					HttpClientSendText(Request.Client, string.Join("\n", lines.ToArray()));
+					return;
+				}
+				catch (Exception ex)
+				{
+					this.Headers["Content-type"] = "text/plain; charset=utf-8";
+					HttpClientSendText(Request.Client, "snapshot error: " + ex.Message);
+					return;
+				}
+			}
+#endif
 
             if (!HttpClientWebSocketInit(Request, false))
                 PassFileToClientByRequest(Request, GetCurrentDir() + @"\map");
@@ -162,7 +226,7 @@ namespace APRSWebServer
 			sb.AppendLine("<head>");
 			sb.AppendLine("<meta charset=\"utf-8\"/>");
 			sb.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>");
-			sb.AppendLine("<title>APRS Server Statistics</title>");
+			sb.AppendLine("<title>APRS-Server - Statistics</title>");
 			sb.AppendLine("<style>");
 			sb.AppendLine(" :root { --bg:#0b0f13; --card:#11161c; --muted:#8aa0b4; --text:#e9f1f7; --accent:#3abef9; --ok:#20c997; --bad:#ff6b6b; }");
 			sb.AppendLine(" body{margin:0;font:14px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);} ");
@@ -315,11 +379,190 @@ namespace APRSWebServer
 			{
 				sb.AppendLine("<div class=\"muted\">No packets yet</div>");
 			}
-			sb.AppendLine("</div>");
+			sb.AppendLine("</div></div></div>");
 
-			sb.AppendLine("</div></body></html>");
+			sb.AppendLine("<center>The Software is developed, designed and programmed by:</br><i><b>13MAD86 / Martin<b></i></center>");
+			sb.AppendLine("</body></html>");
 
 			HttpClientSendText(clReq.Client, sb.ToString());
+		}
+
+		private string AdminField(string name, string value)
+		{
+			return "<div><label for='" + HtmlEncode(name) + "'>" + HtmlEncode(name)
+				 + "</label><input id='" + HtmlEncode(name) + "' name='" + HtmlEncode(name)
+				 + "' value='" + HtmlEncode(value) + "'/></div>";
+		}
+
+		private string AdminCheckbox(string name, string value)
+		{
+			bool isChecked = false;
+			if (!string.IsNullOrEmpty(value))
+				isChecked = value == "1" || value.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+			return "<div>"
+				 + "<label for='" + HtmlEncode(name) + "'>" + HtmlEncode(name) + "</label>"
+				 + "<input type='checkbox' id='" + HtmlEncode(name) + "' name='" + HtmlEncode(name) + "' value='1' "
+				 + (isChecked ? "checked " : "")
+				 + "/>"
+				 + "</div>";
+		}
+
+		private static string GetCfg(XmlDocument xd, string name)
+		{
+			var n = xd.SelectSingleNode("/config/" + name);
+			return n != null ? n.InnerText : "";
+		}
+
+		private static void SetCfg(XmlDocument xd, string name, string val)
+		{
+			var n = xd.SelectSingleNode("/config/" + name);
+			if (n == null)
+			{
+				var cfg = xd.SelectSingleNode("/config");
+				if (cfg == null)
+				{
+					cfg = xd.CreateElement("config");
+					xd.AppendChild(cfg);
+				}
+				n = xd.CreateElement(name);
+				cfg.AppendChild(n);
+			}
+			n.InnerText = val ?? "";
+		}
+
+		private void OutAdmin(ClientRequest req)
+		{
+			string rip = req.RemoteIP ?? "";
+			if (rip != "127.0.0.1" && rip != "::1")
+			{
+				this.Headers["Content-type"] = "text/html; charset=utf-8";
+				HttpClientSendText(req.Client, "<h3>403 Forbidden</h3><p>Admin is local-only. Connect from 127.0.0.1.</p>");
+				return;
+			}
+
+			string xmlPath = Path.Combine(GetCurrentDir(), "aprs.xml");
+			var sb = new StringBuilder(64 * 1024);
+			this.Headers["Content-type"] = "text/html; charset=utf-8";
+
+			string qs = "";
+			int qi = req.Query.IndexOf('?');
+			if (qi >= 0 && qi + 1 < req.Query.Length) qs = req.Query.Substring(qi + 1);
+			var nv = System.Web.HttpUtility.ParseQueryString(qs);
+
+			bool saving = string.Equals(nv["save"], "1", StringComparison.Ordinal);
+			string msg = null;
+
+			var xd = new XmlDocument();
+			xd.PreserveWhitespace = true;
+			try { xd.Load(xmlPath); }
+			catch (Exception ex)
+			{
+				HttpClientSendText(req.Client, "<h3>Config error</h3><pre>" + HtmlEncode(ex.Message) + "</pre>");
+				return;
+			}
+
+			if (saving)
+			{
+				string[] keys =
+				{
+					"ServerName","ServerPort","MaxClients","HTTPServer",
+					"APRSDatabaseFile","StoreGPSMaxTime","ListenIPMode"
+				};
+				foreach (var k in keys)
+				{
+					if (nv[k] != null) SetCfg(xd, k, nv[k]);
+				}
+
+				string[] checkboxKeys = new[]{
+					"EnableClientFilter","PassBackAPRSPackets","OnlyValidPasswordUsers","PassDataOnlyValidUsers",
+					"PassDataOnlyLoggedUser","StoreGPSInMemory","ListenMacMode","OutConfigToConsole",
+					"OutAPRStoConsole","OutConnectionsToConsole","OutBroadcastsMessages","OutBuddiesCount"
+				};
+				foreach (var k in checkboxKeys)
+				{
+					var raw = nv[k];
+					string val = (!string.IsNullOrEmpty(raw) && (raw == "1" || raw.Equals("true", StringComparison.OrdinalIgnoreCase))) ? "1" : "0";
+					SetCfg(xd, k, val);
+				}
+
+				try { xd.Save(xmlPath); msg = "Saved."; }
+				catch (Exception ex) { msg = "Save failed: " + HtmlEncode(ex.Message); }
+			}
+
+			sb.AppendLine("<!doctype html><html><head><meta charset='utf-8'/>");
+			sb.AppendLine("<meta name='viewport' content='width=device-width, initial-scale=1'/>");
+			sb.AppendLine("<title>APRS-Server - Admin</title>");
+			sb.AppendLine("<style>");
+			sb.AppendLine(" :root { --bg:#0b0f13; --card:#11161c; --muted:#8aa0b4; --text:#e9f1f7; --accent:#3abef9; --ok:#20c997; --bad:#ff6b6b; }");
+			sb.AppendLine(" body{margin:0;font:14px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);} ");
+			sb.AppendLine(" .wrap{max-width:1100px;margin:0 auto;padding:20px;} ");
+			sb.AppendLine(" header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;} ");
+			sb.AppendLine(" h1{font-size:20px;margin:0;} h1 span{color:var(--accent);} ");
+			sb.AppendLine(" .muted{color:var(--muted);} ");
+			sb.AppendLine(".card{background:#11161c;border-radius:12px;padding:16px;margin-top:12px}");
+			sb.AppendLine("label{display:block;font-size:12px;color:#8aa0b4;margin-top:10px}");
+			sb.AppendLine("input,select{width:100%;padding:8px;border-radius:8px;border:1px solid #22303c;background:#0e141b;color:#e9f1f7}");
+			sb.AppendLine(".row{display:grid;grid-template-columns:1fr 1fr;gap:12px}");
+			sb.AppendLine("@media (max-width:700px){.row{grid-template-columns:1fr}}");
+			sb.AppendLine(".btns{display:flex;gap:8px;margin-top:16px}");
+			sb.AppendLine(".btn{padding:10px 14px;border-radius:10px;border:1px solid #22303c;background:#0e141b;color:#e9f1f7;text-decoration:none;display:inline-block}");
+			sb.AppendLine(".btn.primary{background:#3abef9;border-color:#3abef9;color:#091017;font-weight:600}");
+			sb.AppendLine(".msg{margin-top:8px;color:#20c997}");
+			sb.AppendLine("</style></head><body><div class='wrap'>");
+
+			sb.AppendFormat("<header><h1>{0} <span>v{1}</span></h1>", HtmlEncode(ServerName), HtmlEncode(APRSServer.GetVersion()));
+			sb.AppendFormat("<div class=\"muted\">Report time: {0:HH:mm:ss dd.MM.yyyy} UTC</div></header>", DateTime.UtcNow);
+
+			if (!string.IsNullOrEmpty(msg)) sb.AppendLine("<div class='msg'>" + msg + "</div>");
+
+			sb.AppendLine("<div class='card'><form method='GET' action='/admin'>");
+			sb.AppendLine("<input type='hidden' name='save' value='1'/>");
+
+			sb.AppendLine("<div class='row'>");
+			sb.AppendLine(AdminField("ServerName", GetCfg(xd, "ServerName")));
+			sb.AppendLine(AdminField("ServerPort", GetCfg(xd, "ServerPort")));
+			sb.AppendLine(AdminField("MaxClients", GetCfg(xd, "MaxClients")));
+			sb.AppendLine(AdminField("HTTPServer", GetCfg(xd, "HTTPServer")));
+			sb.AppendLine("</div>");
+
+			sb.AppendLine("<div class='row'>");
+			sb.AppendLine(AdminField("APRSDatabaseFile", GetCfg(xd, "APRSDatabaseFile")));
+			sb.AppendLine(AdminCheckbox("StoreGPSInMemory", GetCfg(xd, "StoreGPSInMemory")));
+			sb.AppendLine(AdminField("StoreGPSMaxTime", GetCfg(xd, "StoreGPSMaxTime")));
+			sb.AppendLine("</div>");
+
+			sb.AppendLine("<div class='row'>");
+			sb.AppendLine(AdminCheckbox("EnableClientFilter", GetCfg(xd, "EnableClientFilter")));
+			sb.AppendLine(AdminCheckbox("PassBackAPRSPackets", GetCfg(xd, "PassBackAPRSPackets")));
+			sb.AppendLine(AdminCheckbox("OnlyValidPasswordUsers", GetCfg(xd, "OnlyValidPasswordUsers")));
+			sb.AppendLine(AdminCheckbox("PassDataOnlyValidUsers", GetCfg(xd, "PassDataOnlyValidUsers")));
+			sb.AppendLine(AdminCheckbox("PassDataOnlyLoggedUser", GetCfg(xd, "PassDataOnlyLoggedUser")));
+			sb.AppendLine("</div>");
+
+			sb.AppendLine("<div class='row'>");
+			sb.AppendLine(AdminField("ListenIPMode", GetCfg(xd, "ListenIPMode")));
+			sb.AppendLine(AdminCheckbox("ListenMacMode", GetCfg(xd, "ListenMacMode")));
+			sb.AppendLine("</div>");
+
+			sb.AppendLine("<div class='row'>");
+			sb.AppendLine(AdminCheckbox("OutConfigToConsole", GetCfg(xd, "OutConfigToConsole")));
+			sb.AppendLine(AdminCheckbox("OutAPRStoConsole", GetCfg(xd, "OutAPRStoConsole")));
+			sb.AppendLine(AdminCheckbox("OutConnectionsToConsole", GetCfg(xd, "OutConnectionsToConsole")));
+			sb.AppendLine(AdminCheckbox("OutBroadcastsMessages", GetCfg(xd, "OutBroadcastsMessages")));
+			sb.AppendLine(AdminCheckbox("OutBuddiesCount", GetCfg(xd, "OutBuddiesCount")));
+			sb.AppendLine("</div>");
+
+			sb.AppendLine("<div class='btns'>");
+			sb.AppendLine("<button class='btn primary' type='submit'>Save</button>");
+			sb.AppendLine("</div>");
+
+			sb.AppendLine("</form></div></div>");
+
+			sb.AppendLine("<center>The Software is developed, designed and programmed by:</br><i><b>13MAD86 / Martin<b></i></center>");
+			sb.AppendLine("</body></html>");
+
+			HttpClientSendText(req.Client, sb.ToString());
 		}
 
         protected override void OnWebSocketClientConnected(ClientRequest clientRequest)
@@ -330,7 +573,14 @@ namespace APRSWebServer
 
             byte[] ba = GetWebSocketFrameFromString("Welcome to " + ServerName);
             clientRequest.Client.GetStream().Write(ba, 0, ba.Length);
-            clientRequest.Client.GetStream().Flush();
+
+			try {
+				var sock = clientRequest.Client.Client;
+				sock.NoDelay = true;
+				sock.SendBufferSize = 1 << 20;
+				sock.ReceiveBufferSize = 1 << 20;
+				sock.LingerState = new LingerOption(false, 0);
+			} catch { }
 
             if (aprsServer.OutConnectionsToConsole)
                 Console.WriteLine("WebSocket connected from: {0}:{1}, total {2}", clientRequest.RemoteIP, ((IPEndPoint)clientRequest.Client.Client.RemoteEndPoint).Port, wsClients.Count);
@@ -340,11 +590,18 @@ namespace APRSWebServer
 				PassBuds(clientRequest);
 			} else {
 				foreach (var line in GetLatestPositionsFromDb(APRSDatabaseFile, 2000)) {
-					var payload = GetWebSocketFrameFromString(line + "\r\n");
+					byte[] payload = GetWebSocketFrameFromString(line + "\r\n");
+
+					wsMutex.WaitOne();
 					try {
-						clientRequest.Client.GetStream().Write(payload, 0, payload.Length);
-						clientRequest.Client.GetStream().Flush();
-					} catch { }
+						for (int i = 0; i < wsClients.Count; i++) {
+							var s = wsClients[i];
+							try {
+								var ns = s.Client.GetStream();
+								ns.Write(payload, 0, payload.Length);
+							} catch { }
+						}
+					} finally { wsMutex.ReleaseMutex(); }
 				}
 			}
 #else
@@ -381,7 +638,6 @@ namespace APRSWebServer
                 string tws = fws + " ok";
                 byte[] toSend = GetWebSocketFrameFromString(tws);
                 clientRequest.Client.GetStream().Write(toSend, 0, toSend.Length);
-                clientRequest.Client.GetStream().Flush();
             }
             catch { };
         }
@@ -400,7 +656,6 @@ namespace APRSWebServer
                     try
                     {
                         cr.Client.GetStream().Write(toSend, 0, toSend.Length);
-                        cr.Client.GetStream().Flush();
                     }
                     catch { };
                 };
@@ -412,18 +667,14 @@ namespace APRSWebServer
             string text = bud.GetWebSocketText() + "\r\n";
             byte[] toSend = GetWebSocketFrameFromString(text);
             wsMutex.WaitOne();
-            if (wsClients.Count > 0)
-            {
+            if (wsClients.Count > 0) {
                 if (aprsServer.OutBroadcastsMessages)
                     Console.WriteLine("Broadcast WS: {0}", text.Replace("\r", "").Replace("\n", ""));
-                for (int i = 0; i < wsClients.Count; i++)
-                {
-                    try
-                    {
+
+                for (int i = 0; i < wsClients.Count; i++) {
+                    try {
                         wsClients[i].Client.GetStream().Write(toSend, 0, toSend.Length);
-                        wsClients[i].Client.GetStream().Flush();
-                    }
-                    catch { };
+                    } catch { };
                 };
             };
             wsMutex.ReleaseMutex();
