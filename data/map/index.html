@@ -16,6 +16,8 @@
 			<script src="jQueryRotate.js"></script>
 			<script src="leaflet.js"></script>
 			<script src="L.Control.Zoomslider.js"></script>
+			<script src="L.Terminator.js"></script>
+			<script src="leaflet-heat.js"></script>
 			<script src="leaflet.label.js"></script>
 			<link rel="stylesheet" href="style/leaflet/leaflet.css" />
 			<link rel="stylesheet" href="style/leaflet/L.Control.Zoomslider.css" />
@@ -32,6 +34,9 @@
 
 			<button id="toggleList" aria-expanded="false">Users</button>
 			<button id="themeToggle">Switch</button>
+			<div id="heatToggle" class="heat-toggle">
+				<label><input id="heatSwitch" type="checkbox"> Heatmap</label>
+			</div>
 			<div class="w3-row">
 				<div class="w3-col m8">
 					<div id="map" style="position:relative; color: #000000; width: 100%; min-height: 100vh; height: 100vh; max-height: 100vh; z-index:0;">
@@ -121,6 +126,7 @@
 
 				var openstreetmap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { minZoom: 3, attribution: 'Open Street Map', opacity: 0.75, noWrap: true, continuousWorld: false });
 				openstreetmap.addTo(map);
+				L.terminator().addTo(map);
 				var basemaps = { "Open Street Map": openstreetmap };
 
 				function findMarkersNear(latlng, pxRadius){
@@ -843,6 +849,66 @@
 				  if (pre && !pre.hidden) { hidePreloader(); }
 				}, 10000);
 			  })();
+
+			(function(){
+			  if (!window.L || !L.heatLayer) { console.warn('Leaflet.heat not loaded'); return; }
+
+			  if (!window.heatLayer) window.heatLayer = L.heatLayer([], { radius:22, blur:16, maxZoom:18, minOpacity:0.5 });
+
+			  var toggleBox = document.getElementById('heatToggle');
+			  var heatSwitchEl = document.getElementById('heatSwitch');
+			  if (toggleBox && !toggleBox.__shown) { toggleBox.style.display='block'; toggleBox.__shown = true; }
+
+			  var _heatRebuildTimer = null;
+			  function scheduleHeatRebuild(){
+				if (_heatRebuildTimer) clearTimeout(_heatRebuildTimer);
+				_heatRebuildTimer = setTimeout(rebuildHeatFromMarkers, 200);
+			  }
+
+			  function rebuildHeatFromMarkers(){
+				if (!window.map || !window.heatLayer) return;
+				var pts = [];
+				var mc = window.marker_cache || [];
+				for (var i = 0; i < mc.length; i++){
+				  var m = mc[i];
+				  if (!m) continue;
+				  var lat = parseFloat(m.lat), lon = parseFloat(m.lon);
+				  if (!isFinite(lat) || !isFinite(lon)) continue;
+
+				  var w = 0.6;
+				  if (m.speed != null) {
+					var sp = parseFloat(m.speed);
+					if (isFinite(sp)) w = sp > 120 ? 0.9 : (sp > 60 ? 0.75 : 0.6);
+				  }
+
+				  pts.push([lat, lon, w]);
+				}
+				window.heatLayer.setLatLngs(pts);
+			  }
+
+			  if (heatSwitchEl && !heatSwitchEl.__wired){
+				heatSwitchEl.__wired = true;
+				heatSwitchEl.addEventListener('change', function(){
+				  if (!window.map || !window.heatLayer) return;
+				  if (heatSwitchEl.checked) {
+					window.heatLayer.addTo(map);
+					rebuildHeatFromMarkers();
+				  } else {
+					map.removeLayer(window.heatLayer);
+				  }
+				});
+			  }
+
+			  if (typeof window.UpdateFromWebSocket === 'function' && !window.__heatMarkersWrapped){
+				window.__heatMarkersWrapped = true;
+				var __oldU = window.UpdateFromWebSocket;
+				window.UpdateFromWebSocket = function(line){
+				  var r = __oldU.apply(this, arguments);
+				  try { if (heatSwitchEl && heatSwitchEl.checked) scheduleHeatRebuild(); } catch(e){}
+				  return r;
+				};
+			  }
+			})();
 			</script>
 		</body>
 	</html>
