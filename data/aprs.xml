@@ -9,10 +9,13 @@
 	<HTTPServer>8060</HTTPServer> <!-- Enable Http Server at Port, ex: 80; default 0 -->	
 
 	<!-- APRS Server, Outgoing Data -->
-	<EnableClientFilter>1</EnableClientFilter> <!-- Enable filter for clients; 0 - No, 1 - Yes; default 0 -->
-	<PassBackAPRSPackets>1</PassBackAPRSPackets> <!-- Pass APRS Packets back to sender; 0 - No, 1 - Yes; default 0 -->
+	<EnableClientFilter>0</EnableClientFilter> <!-- Enable filter for clients; 0 - No, 1 - Yes; default 0 -->
+	<PassBackAPRSPackets>0</PassBackAPRSPackets> <!-- Pass APRS Packets back to sender; 0 - No, 1 - Yes; default 0 -->
 
 	<APRSDatabaseFile>aprs.sqlite</APRSDatabaseFile> <!-- APRS Database File -->
+
+	<APRSHTTPSFile>https.pfx</APRSHTTPSFile> <!-- APRS SSL File -->
+	<APRSHTTPSPassword>Passw0rd</APRSHTTPSPassword> <!-- APRS SSL Password -->
 	
 	<!-- APRS Server, Incoming Data -->
 	<OnlyValidPasswordUsers>0</OnlyValidPasswordUsers> <!-- Allow to connect only users with correct password, 0 - No, 1 - Yes; default 0 -->

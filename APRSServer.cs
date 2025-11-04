@@ -72,6 +72,8 @@ namespace APRSWebServer
             this.ServerName = "APRSWebServer";
             this.ListenPort = 14580;
             this.APRSDatabaseFile = "aprs.sqlite";
+            this.APRSHTTPSFile = "https.pfx";
+            this.APRSHTTPSPassword = "Passw0rd";
             this.ListenIPAllow = new string[0];
             string fName = SimpleServersPBAuth.TTCPServer.GetCurrentDir() + @"\aprs.xml";
             XmlDocument xd = new XmlDocument();
@@ -138,6 +140,8 @@ namespace APRSWebServer
                 httpServer.ServerName = this.ServerName;
 				_storage = new APRSStorage(this.APRSDatabaseFile);
                 httpServer.APRSDatabaseFile = this.APRSDatabaseFile;
+                httpServer.APRSHTTPSFile = this.APRSHTTPSFile;
+                httpServer.APRSHTTPSPassword = this.APRSHTTPSPassword;
                 httpServer.AllowBrowseFiles = true;
                 httpServer.ListenIPMode = this.ListenIPMode;
                 httpServer.ListenIPAllow = this.ListenIPAllow;

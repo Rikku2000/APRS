@@ -181,12 +181,12 @@
 /* visual tweaks */
 
 .leaflet-container {
-	background: var(--panel-2);
-	outline: 0;
-	}
+  background: var(--panel-2);
+  outline: 0;
+}
 .leaflet-container a {
-	color: var(--brand);
-	}
+  color: var(--brand);
+}
 .leaflet-container a.leaflet-active {
 	outline: 2px solid orange;
 	}
@@ -205,30 +205,31 @@
 /* general toolbar styles */
 
 .leaflet-bar {
-	box-shadow: 0 1px 5px rgba(0,0,0,0.65);
-	border-radius: 4px;
-	}
+  box-shadow: 0 1px 5px rgba(0,0,0,0.65);
+  border-radius: 4px;
+}
 .leaflet-bar a,
 .leaflet-bar a:hover {
-	background-color: var(--control-bg);
-	color: var(--control-fg);
-	border-bottom: 1px solid var(--border);
-	width: 26px;
-	height: 26px;
-	line-height: 26px;
-	display: block;
-	text-align: center;
-	text-decoration: none;
-	}
+  background-color: var(--control-bg);
+  color: var(--control-fg);
+  border-bottom: 1px solid var(--border);
+  width: 26px;
+  height: 26px;
+  line-height: 26px;
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+.leaflet-bar a:hover {
+  background-color: var(--control-bg-hover);
+}
 .leaflet-bar a,
 .leaflet-control-layers-toggle {
 	background-position: 50% 50%;
 	background-repeat: no-repeat;
 	display: block;
 	}
-.leaflet-bar a:hover {
-	background-color: var(--control-bg-hover);
-	}
+
 .leaflet-bar a:first-child {
 	border-top-left-radius: 4px;
 	border-top-right-radius: 4px;
@@ -243,7 +244,6 @@
 	background-color: #f4f4f4;
 	color: #bbb;
 	}
-
 .leaflet-touch .leaflet-bar a {
 	width: 30px;
 	height: 30px;
@@ -273,10 +273,11 @@
 /* layers control */
 
 .leaflet-control-layers {
-	box-shadow: 0 1px 5px rgba(0,0,0,0.4);
-	background: var(--control-bg); color: var(--text);
-	border-radius: 5px;
-	}
+  box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+  background: var(--control-bg);
+  color: var(--text);
+  border-radius: 5px;
+}
 .leaflet-control-layers-toggle {
 	background-image: url(images/layers.png);
 	width: 36px;
@@ -299,9 +300,10 @@
 	position: relative;
 	}
 .leaflet-control-layers-expanded {
-	padding: 6px 10px 6px 6px;
-	background: var(--control-bg); color: var(--text);
-	}
+  padding: 6px 10px 6px 6px;
+  background: var(--control-bg);
+  color: var(--text);
+}
 .leaflet-control-layers-selector {
 	margin-top: 2px;
 	position: relative;
@@ -320,9 +322,10 @@
 /* attribution and scale controls */
 
 .leaflet-container .leaflet-control-attribution {
-	background: var(--scale-bg); color: var(--text);
-	margin: 0;
-	}
+  background: var(--scale-bg);
+  color: var(--text);
+  margin: 0;
+}
 .leaflet-control-attribution,
 .leaflet-control-scale-line {
 	padding: 0 5px;
@@ -345,18 +348,18 @@
 	margin-bottom: 5px;
 	}
 .leaflet-control-scale-line {
-	border: 2px solid var(--border);
-	background: var(--scale-bg);
-	color: var(--text);
-	border-top: none;
-	line-height: 1.1;
-	padding: 2px 5px 1px;
-	font-size: 11px;
-	white-space: nowrap;
-	overflow: hidden;
-	-moz-box-sizing: content-box;
-	     box-sizing: content-box;
-	}
+  border: 2px solid var(--border);
+  border-top: none;
+  line-height: 1.1;
+  padding: 2px 5px 1px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  -moz-box-sizing: content-box;
+       box-sizing: content-box;
+  background: var(--scale-bg);
+  color: var(--text);
+}
 .leaflet-control-scale-line:not(:first-child) {
 	border-top: 2px solid #000;
 	border-bottom: none;
@@ -418,11 +421,10 @@
 	}
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {
-	background: var(--popup-bg);
-	color: var(--popup-text);
-
-	box-shadow: 0 3px 14px rgba(0,0,0,0.4);
-	}
+  background: var(--popup-bg);
+  color: var(--popup-text);
+  box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+}
 .leaflet-container a.leaflet-popup-close-button {
 	position: absolute;
 	top: 0;

@@ -1,23 +1,23 @@
 .leaflet-label {
-	background: var(--panel-2);
-	background-clip: padding-box;
-	border-color: var(--bg);
-	border-radius: 2px;
-	border-style: solid;
-	border-width: 1px;
-	color: var(--text);
-	display: block;
-	font: 11px/11px Arial, sans-serif;
-	padding: 2px 2px;
-	position: absolute;
-	-webkit-user-select: none;
-	   -moz-user-select: none;
-	    -ms-user-select: none;
-	        user-select: none;
-	pointer-events: none;
-	white-space: nowrap;
-	top: 24px;
-	left: -22px;
+  background: var(--panel-2);
+  background-clip: padding-box;
+  border-color: var(--bg);
+  border-radius: 2px;
+  border-style: solid;
+  border-width: 1px;
+  color: var(--text);
+  display: block;
+  font: 11px/11px Arial, sans-serif;
+  padding: 2px 2px;
+  position: absolute;
+  -webkit-user-select: none;
+     -moz-user-select: none;
+      -ms-user-select: none;
+          user-select: none;
+  pointer-events: none;
+  white-space: nowrap;
+  top: 24px;
+  left: -22px;
 }
 
 .aprs-clear{

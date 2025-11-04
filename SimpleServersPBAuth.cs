@@ -1364,14 +1364,46 @@ namespace SimpleServersPBAuth
             {
                 _aprsdatabasefile = value;
                 _headers_mutex.WaitOne();
-                if (_headers.ContainsKey("APRS-DDatabase-File"))
-                    _headers["APRS-DDatabase-File"] = _aprsdatabasefile;
+                if (_headers.ContainsKey("APRS-Database-File"))
+                    _headers["APRS-Database-File"] = _aprsdatabasefile;
                 else
-                    _headers.Add("APRS-DDatabase-File", _aprsdatabasefile);
+                    _headers.Add("APRS-Database-File", _aprsdatabasefile);
                 _headers_mutex.ReleaseMutex();
             }
         }
         protected string _aprsdatabasefile = "";
+
+        public string APRSHTTPSFile
+        {
+            get { return _aprshttpsfile; }
+            set
+            {
+                _aprshttpsfile = value;
+                _headers_mutex.WaitOne();
+                if (_headers.ContainsKey("APRS-HTTPS-File"))
+                    _headers["APRS-HTTPS-File"] = _aprshttpsfile;
+                else
+                    _headers.Add("APRS-HTTPS-File", _aprshttpsfile);
+                _headers_mutex.ReleaseMutex();
+            }
+        }
+        protected string _aprshttpsfile = "";
+
+        public string APRSHTTPSPassword
+        {
+            get { return _aprshttpspassword; }
+            set
+            {
+                _aprshttpspassword = value;
+                _headers_mutex.WaitOne();
+                if (_headers.ContainsKey("APRS-HTTPS-Password"))
+                    _headers["APRS-HTTPS-Password"] = _aprshttpspassword;
+                else
+                    _headers.Add("APRS-HTTPS-Password", _aprshttpspassword);
+                _headers_mutex.ReleaseMutex();
+            }
+        }
+        protected string _aprshttpspassword = "";
 
         public virtual bool OnlyHTTPClients { get { return _OnlyHTTP; } set { _OnlyHTTP = value; } }
         protected bool _OnlyHTTP = true;

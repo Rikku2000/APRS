@@ -18,11 +18,9 @@ using System.Globalization;
 using System.Data;
 using System.Data.SQLite;
 
-/* HTTPS */
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
-/* HTTPS */
 
 namespace APRSWebServer
 {
@@ -32,19 +30,17 @@ namespace APRSWebServer
         private Mutex wsMutex = new Mutex();
         private List<ClientRequest> wsClients = new List<ClientRequest>();
 
-		/* HTTPS */
         private X509Certificate2 httpsCertificate = null;
         private bool httpsEnabled = false;
         private readonly Dictionary<TcpClient, SslStream> httpsStreams = new Dictionary<TcpClient, SslStream>();
         private readonly Mutex httpsMutex = new Mutex();
-		/* HTTPS */
 
 		public HttpAPRSServer(APRSServer aprsServer) : base(80) { 
 			this.aprsServer = aprsServer; 
 			this.ResponseEncoding = Encoding.UTF8;
 			this.RequestEncoding  = Encoding.UTF8;
 			this.Headers["Content-type"] = "text/html; charset=utf-8";
-			InitHttps(); // HTTPS
+			InitHttps();
 		}
 
 		public HttpAPRSServer(APRSServer aprsServer, int Port) : base(Port) {
@@ -52,7 +48,7 @@ namespace APRSWebServer
 			this.ResponseEncoding = Encoding.UTF8;
 			this.RequestEncoding  = Encoding.UTF8;
 			this.Headers["Content-type"] = "text/html; charset=utf-8";
-			InitHttps(); // HTTPS
+			InitHttps();
 		}
 
 		public HttpAPRSServer(APRSServer aprsServer, IPAddress IP, int Port) : base(IP, Port) {
@@ -60,28 +56,72 @@ namespace APRSWebServer
 			this.ResponseEncoding = Encoding.UTF8;
 			this.RequestEncoding  = Encoding.UTF8;
 			this.Headers["Content-type"] = "text/html; charset=utf-8";
-			InitHttps(); // HTTPS
+			InitHttps();
 		}
 
         ~HttpAPRSServer() { this.Dispose(); }
 
+		public string HttpBuildPage (string title, string msg) {
+			string server = HtmlEncode(ServerName);
+			string ver = HtmlEncode(APRSServer.GetVersion());
+			string ts = DateTime.UtcNow.ToString("HH:mm:ss dd.MM.yyyy", CultureInfo.InvariantCulture);
+
+			string output = string.Format(CultureInfo.InvariantCulture,
+		@"<!doctype html>
+		<html lang=""en"">
+		<head>
+		<meta charset=""utf-8""/>
+		<meta name=""viewport"" content=""width=device-width, initial-scale=1""/>
+		<title>APRS-Server</title>
+		<style>
+		 :root {{ --bg:#0b0f13; --card:#11161c; --muted:#8aa0b4; --text:#e9f1f7; --accent:#3abef9; --ok:#20c997; --bad:#ff6b6b; }}
+		 body{{margin:0;font:14px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);}}
+		 .wrap{{max-width:1100px;margin:0 auto;padding:20px;}}
+		 header{{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}}
+		 h1{{font-size:20px;margin:0;}} h1 span{{color:var(--accent);}}
+		 .muted{{color:var(--muted);}}
+		 .card{{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 1px 0 rgba(255,255,255,0.04) inset;}}
+		 .card h2{{margin:0 0 8px;font-size:18px;}}
+		 @media (max-width:640px){{ header{{flex-direction:column;align-items:flex-start;}} }}
+		</style>
+		</head>
+		<body>
+		<div class=""wrap"">
+		  <header>
+			<h1>{0} <span>v{1}</span></h1>
+			<div class=""muted"">Report time: {2} UTC</div>
+		  </header>
+		  <div class=""card"">
+			<h2>{3}</h2>
+			<p class=""muted"">
+			  {4}
+			</p>
+		  </div>
+		</div>
+		<center>- This Software was created by -</br><i><b>13MAD86 / Martin<b></i></center>
+		</body>
+		</html>", server, ver, ts, title, msg);
+
+			return output;
+		}
+
         private void InitHttps() {
             try {
                 string baseDir = SimpleServersPBAuth.TTCPServer.GetCurrentDir();
-                string pfxPath = Path.Combine(baseDir, "https.pfx");
+                string pfxPath = Path.Combine(baseDir, APRSHTTPSFile);
 
                 if (File.Exists(pfxPath)) {
-                    httpsCertificate = new X509Certificate2(pfxPath, "Passw0rd");
+                    httpsCertificate = new X509Certificate2(pfxPath, APRSHTTPSPassword);
 
                     httpsEnabled = true;
-                    Console.WriteLine("HTTPS enabled using certificate: " + pfxPath);
+                    Console.WriteLine("\nHTTPS enabled using certificate: " + pfxPath + "\n");
                 } else {
                     httpsEnabled = false;
-                    Console.WriteLine("HTTPS: no https.pfx found, running HTTP only.");
+                    Console.WriteLine("\nHTTPS: no .pfx file found, running HTTP only.\n");
                 }
             } catch (Exception ex) {
                 httpsEnabled = false;
-                Console.WriteLine("HTTPS disabled: " + ex.GetType().Name + " - " + ex.Message);
+                Console.WriteLine("\nHTTPS disabled: " + ex.GetType().Name + " - " + ex.Message + "\n");
             }
         }
 
@@ -272,27 +312,80 @@ namespace APRSWebServer
         }
 
         protected override void HttpClientSendText(TcpClient Client, string Text, IDictionary<string, string> dopHeaders) {
-            string body = "<html><body>" + Text + "</body></html>";
-            HttpClientSendData(Client, ResponseEncoding.GetBytes(body), dopHeaders, 200, "text/html");
+            HttpClientSendData(Client, ResponseEncoding.GetBytes(Text), dopHeaders, 200, "text/html");
         }
 
         protected override void HttpClientSendText(TcpClient Client, string Text) {
             HttpClientSendText(Client, Text, null);
         }
 
-        protected override void HttpClientSendError(TcpClient Client, int Code, Dictionary<string, string> dopHeaders) {
-            string CodeStr = Code.ToString() + " " + ((HttpStatusCode)Code).ToString();
-            string body = "<html><body><h1>" + CodeStr + "</h1></body></html>";
-            HttpClientSendData(Client, ResponseEncoding.GetBytes(body), dopHeaders, Code, "text/html");
-        }
+		protected override void HttpClientSendError( TcpClient Client, int Code, Dictionary<string, string> dopHeaders) {
+			string html;
+
+			if (Code == 404) {
+				string server = HtmlEncode(ServerName);
+				string ver    = HtmlEncode(APRSServer.GetVersion());
+				string ts     = DateTime.UtcNow.ToString("HH:mm:ss dd.MM.yyyy", CultureInfo.InvariantCulture);
+
+				html = string.Format(CultureInfo.InvariantCulture,
+		@"<!doctype html>
+		<html lang=""en"">
+		<head>
+		<meta charset=""utf-8""/>
+		<meta name=""viewport"" content=""width=device-width, initial-scale=1""/>
+		<title>APRS-Server - 404</title>
+		<style>
+		 :root {{ --bg:#0b0f13; --card:#11161c; --muted:#8aa0b4; --text:#e9f1f7; --accent:#3abef9; --ok:#20c997; --bad:#ff6b6b; }}
+		 body{{margin:0;font:14px/1.45 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);}}
+		 .wrap{{max-width:1100px;margin:0 auto;padding:20px;}}
+		 header{{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}}
+		 h1{{font-size:20px;margin:0;}} h1 span{{color:var(--accent);}}
+		 .muted{{color:var(--muted);}}
+		 .card{{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 1px 0 rgba(255,255,255,0.04) inset;}}
+		 .card h2{{margin:0 0 8px;font-size:18px;}}
+		 @media (max-width:640px){{ header{{flex-direction:column;align-items:flex-start;}} }}
+		</style>
+		</head>
+		<body>
+		<div class=""wrap"">
+		  <header>
+			<h1>{0} <span>v{1}</span></h1>
+			<div class=""muted"">Report time: {2} UTC</div>
+		  </header>
+		  <div class=""card"">
+			<h2>404 – Page not found</h2>
+			<p class=""muted"">
+			  The requested page could not be found on this APRS server.
+			  It might have been moved, removed or the URL is wrong.
+			</p>
+		  </div>
+		</div>
+		<center>- This Software was created by -</br><i><b>13MAD86 / Martin<b></i></center>
+		</body>
+		</html>", server, ver, ts);
+			} else {
+				string codeStr = Code.ToString() + " " + ((HttpStatusCode)Code).ToString();
+				html = "<!DOCTYPE html><html><body><h1>" + codeStr + "</h1></body></html>";
+			}
+
+			byte[] body = ResponseEncoding.GetBytes(html);
+			HttpClientSendData(Client, body, dopHeaders, Code, "text/html; charset=utf-8");
+		}
 
         protected override void HttpClientSendError(TcpClient Client, int Code) {
             HttpClientSendError(Client, Code, (Dictionary<string, string>)null);
         }
 
         protected override void HttpClientSendError(TcpClient Client, int Code, string Text) {
-            HttpClientSendData(Client, ResponseEncoding.GetBytes(Text), null, Code, "text/html");
+            string html = "<!DOCTYPE html><html><body><h1>" +
+                          Code.ToString() + " " + ((HttpStatusCode)Code).ToString() +
+                          "</h1><p>" + System.Web.HttpUtility.HtmlEncode(Text ?? "") +
+                          "</p></body></html>";
+
+            byte[] body = ResponseEncoding.GetBytes(html);
+            HttpClientSendData(Client, body, null, Code, "text/html; charset=utf-8");
         }
+
 
         protected override void HttpClientSendFile(TcpClient Client, string fileName, Dictionary<string, string> dopHeaders, int ResponseCode, string ContentType) {
             if (!File.Exists(fileName)) {
@@ -308,9 +401,6 @@ namespace APRSWebServer
 
             HttpClientSendData(Client, body, dopHeaders, ResponseCode, ContentType);
         }
-
-
-		/* HTTPS */
 
         protected override void GetClientRequest(ClientRequest Request)
         {
@@ -377,7 +467,7 @@ namespace APRSWebServer
 				catch (Exception ex)
 				{
 					this.Headers["Content-type"] = "text/plain; charset=utf-8";
-					HttpClientSendText(Request.Client, "snapshot error: " + ex.Message);
+					HttpClientSendText(Request.Client, HttpBuildPage("Snapshot error", ex.Message));
 					return;
 				}
 			}
@@ -637,7 +727,7 @@ namespace APRSWebServer
 			}
 			sb.AppendLine("</div></div></div>");
 
-			sb.AppendLine("<center>The Software is developed, designed and programmed by:</br><i><b>13MAD86 / Martin<b></i></center>");
+			sb.AppendLine("<center>- This Software was created by -</br><i><b>13MAD86 / Martin<b></i></center>");
 			sb.AppendLine("</body></html>");
 
 			HttpClientSendText(clReq.Client, sb.ToString());
@@ -693,7 +783,7 @@ namespace APRSWebServer
 			if (rip != "127.0.0.1" && rip != "::1")
 			{
 				this.Headers["Content-type"] = "text/html; charset=utf-8";
-				HttpClientSendText(req.Client, "<h3>403 Forbidden</h3><p>Admin is local-only. Connect from 127.0.0.1.</p>");
+				HttpClientSendText(req.Client, HttpBuildPage("403 Forbidden", "Admin is local-only. Connect from 127.0.0.1."));
 				return;
 			}
 
@@ -714,7 +804,7 @@ namespace APRSWebServer
 			try { xd.Load(xmlPath); }
 			catch (Exception ex)
 			{
-				HttpClientSendText(req.Client, "<h3>Config error</h3><pre>" + HtmlEncode(ex.Message) + "</pre>");
+				HttpClientSendText(req.Client, HttpBuildPage("Config error", HtmlEncode(ex.Message)));
 				return;
 			}
 
@@ -722,8 +812,8 @@ namespace APRSWebServer
 			{
 				string[] keys =
 				{
-					"ServerName","ServerPort","MaxClients","HTTPServer",
-					"APRSDatabaseFile","StoreGPSMaxTime","ListenIPMode"
+					"ServerName","ServerPort","MaxClients","HTTPServer","APRSHTTPSFile",
+					"APRSHTTPSPassword","APRSDatabaseFile","StoreGPSMaxTime","ListenIPMode"
 				};
 				foreach (var k in keys)
 				{
@@ -776,37 +866,42 @@ namespace APRSWebServer
 			sb.AppendLine("<input type='hidden' name='save' value='1'/>");
 
 			sb.AppendLine("<div class='row'>");
-			sb.AppendLine(AdminField("ServerName", GetCfg(xd, "ServerName")));
-			sb.AppendLine(AdminField("ServerPort", GetCfg(xd, "ServerPort")));
-			sb.AppendLine(AdminField("MaxClients", GetCfg(xd, "MaxClients")));
-			sb.AppendLine(AdminField("HTTPServer", GetCfg(xd, "HTTPServer")));
+			sb.AppendLine(AdminField("Server Name", GetCfg(xd, "ServerName")));
+			sb.AppendLine(AdminField("Server Port", GetCfg(xd, "ServerPort")));
+			sb.AppendLine(AdminField("Max Clients", GetCfg(xd, "MaxClients")));
+			sb.AppendLine(AdminField("HTTP Server", GetCfg(xd, "HTTPServer")));
 			sb.AppendLine("</div>");
 
 			sb.AppendLine("<div class='row'>");
-			sb.AppendLine(AdminField("APRSDatabaseFile", GetCfg(xd, "APRSDatabaseFile")));
-			sb.AppendLine(AdminCheckbox("StoreGPSInMemory", GetCfg(xd, "StoreGPSInMemory")));
-			sb.AppendLine(AdminField("StoreGPSMaxTime", GetCfg(xd, "StoreGPSMaxTime")));
+			sb.AppendLine(AdminField("HTTPS File", GetCfg(xd, "APRSHTTPSFile")));
+			sb.AppendLine(AdminField("HTTPS Password", GetCfg(xd, "APRSHTTPSPassword")));
 			sb.AppendLine("</div>");
 
 			sb.AppendLine("<div class='row'>");
-			sb.AppendLine(AdminCheckbox("EnableClientFilter", GetCfg(xd, "EnableClientFilter")));
-			sb.AppendLine(AdminCheckbox("PassBackAPRSPackets", GetCfg(xd, "PassBackAPRSPackets")));
-			sb.AppendLine(AdminCheckbox("OnlyValidPasswordUsers", GetCfg(xd, "OnlyValidPasswordUsers")));
-			sb.AppendLine(AdminCheckbox("PassDataOnlyValidUsers", GetCfg(xd, "PassDataOnlyValidUsers")));
-			sb.AppendLine(AdminCheckbox("PassDataOnlyLoggedUser", GetCfg(xd, "PassDataOnlyLoggedUser")));
+			sb.AppendLine(AdminField("Database File", GetCfg(xd, "APRSDatabaseFile")));
+			sb.AppendLine(AdminCheckbox("Store GPS In Memory", GetCfg(xd, "StoreGPSInMemory")));
+			sb.AppendLine(AdminField("Store GPS Max Time", GetCfg(xd, "StoreGPSMaxTime")));
 			sb.AppendLine("</div>");
 
 			sb.AppendLine("<div class='row'>");
-			sb.AppendLine(AdminField("ListenIPMode", GetCfg(xd, "ListenIPMode")));
-			sb.AppendLine(AdminCheckbox("ListenMacMode", GetCfg(xd, "ListenMacMode")));
+			sb.AppendLine(AdminCheckbox("Enable Client Filter", GetCfg(xd, "EnableClientFilter")));
+			sb.AppendLine(AdminCheckbox("Pass Back APRS Packets", GetCfg(xd, "PassBackAPRSPackets")));
+			sb.AppendLine(AdminCheckbox("Only Valid Password Users", GetCfg(xd, "OnlyValidPasswordUsers")));
+			sb.AppendLine(AdminCheckbox("Pass Data Only Valid Users", GetCfg(xd, "PassDataOnlyValidUsers")));
+			sb.AppendLine(AdminCheckbox("Pass Data Only Logged User", GetCfg(xd, "PassDataOnlyLoggedUser")));
 			sb.AppendLine("</div>");
 
 			sb.AppendLine("<div class='row'>");
-			sb.AppendLine(AdminCheckbox("OutConfigToConsole", GetCfg(xd, "OutConfigToConsole")));
-			sb.AppendLine(AdminCheckbox("OutAPRStoConsole", GetCfg(xd, "OutAPRStoConsole")));
-			sb.AppendLine(AdminCheckbox("OutConnectionsToConsole", GetCfg(xd, "OutConnectionsToConsole")));
-			sb.AppendLine(AdminCheckbox("OutBroadcastsMessages", GetCfg(xd, "OutBroadcastsMessages")));
-			sb.AppendLine(AdminCheckbox("OutBuddiesCount", GetCfg(xd, "OutBuddiesCount")));
+			sb.AppendLine(AdminField("Listen IP Mode", GetCfg(xd, "ListenIPMode")));
+			sb.AppendLine(AdminCheckbox("Listen Mac Mode", GetCfg(xd, "ListenMacMode")));
+			sb.AppendLine("</div>");
+
+			sb.AppendLine("<div class='row'>");
+			sb.AppendLine(AdminCheckbox("OutConfig To Console", GetCfg(xd, "OutConfigToConsole")));
+			sb.AppendLine(AdminCheckbox("OutAPRS to Console", GetCfg(xd, "OutAPRStoConsole")));
+			sb.AppendLine(AdminCheckbox("Out Connections To Console", GetCfg(xd, "OutConnectionsToConsole")));
+			sb.AppendLine(AdminCheckbox("Out Broadcasts Messages", GetCfg(xd, "OutBroadcastsMessages")));
+			sb.AppendLine(AdminCheckbox("Out Buddies Count", GetCfg(xd, "OutBuddiesCount")));
 			sb.AppendLine("</div>");
 
 			sb.AppendLine("<div class='btns'>");
@@ -815,7 +910,7 @@ namespace APRSWebServer
 
 			sb.AppendLine("</form></div></div>");
 
-			sb.AppendLine("<center>The Software is developed, designed and programmed by:</br><i><b>13MAD86 / Martin<b></i></center>");
+			sb.AppendLine("<center>- This Software was created by -</br><i><b>13MAD86 / Martin<b></i></center>");
 			sb.AppendLine("</body></html>");
 
 			HttpClientSendText(req.Client, sb.ToString());
