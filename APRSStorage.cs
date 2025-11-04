@@ -1,4 +1,3 @@
-#if SQLITE
 using System;
 using System.Data;
 using System.Data.SQLite;
@@ -232,4 +231,3 @@ namespace APRSWebServer
         }
     }
 }
-#endif

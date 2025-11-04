@@ -15,11 +15,14 @@ using System.Security.Cryptography;
 using System.Runtime.InteropServices;
 using System.Reflection;
 using System.Globalization;
-
-#if SQLITE
 using System.Data;
 using System.Data.SQLite;
-#endif
+
+/* HTTPS */
+using System.Net.Security;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
+/* HTTPS */
 
 namespace APRSWebServer
 {
@@ -29,11 +32,19 @@ namespace APRSWebServer
         private Mutex wsMutex = new Mutex();
         private List<ClientRequest> wsClients = new List<ClientRequest>();
 
+		/* HTTPS */
+        private X509Certificate2 httpsCertificate = null;
+        private bool httpsEnabled = false;
+        private readonly Dictionary<TcpClient, SslStream> httpsStreams = new Dictionary<TcpClient, SslStream>();
+        private readonly Mutex httpsMutex = new Mutex();
+		/* HTTPS */
+
 		public HttpAPRSServer(APRSServer aprsServer) : base(80) { 
 			this.aprsServer = aprsServer; 
 			this.ResponseEncoding = Encoding.UTF8;
 			this.RequestEncoding  = Encoding.UTF8;
 			this.Headers["Content-type"] = "text/html; charset=utf-8";
+			InitHttps(); // HTTPS
 		}
 
 		public HttpAPRSServer(APRSServer aprsServer, int Port) : base(Port) {
@@ -41,6 +52,7 @@ namespace APRSWebServer
 			this.ResponseEncoding = Encoding.UTF8;
 			this.RequestEncoding  = Encoding.UTF8;
 			this.Headers["Content-type"] = "text/html; charset=utf-8";
+			InitHttps(); // HTTPS
 		}
 
 		public HttpAPRSServer(APRSServer aprsServer, IPAddress IP, int Port) : base(IP, Port) {
@@ -48,9 +60,257 @@ namespace APRSWebServer
 			this.ResponseEncoding = Encoding.UTF8;
 			this.RequestEncoding  = Encoding.UTF8;
 			this.Headers["Content-type"] = "text/html; charset=utf-8";
+			InitHttps(); // HTTPS
 		}
 
         ~HttpAPRSServer() { this.Dispose(); }
+
+        private void InitHttps() {
+            try {
+                string baseDir = SimpleServersPBAuth.TTCPServer.GetCurrentDir();
+                string pfxPath = Path.Combine(baseDir, "https.pfx");
+
+                if (File.Exists(pfxPath)) {
+                    httpsCertificate = new X509Certificate2(pfxPath, "Passw0rd");
+
+                    httpsEnabled = true;
+                    Console.WriteLine("HTTPS enabled using certificate: " + pfxPath);
+                } else {
+                    httpsEnabled = false;
+                    Console.WriteLine("HTTPS: no https.pfx found, running HTTP only.");
+                }
+            } catch (Exception ex) {
+                httpsEnabled = false;
+                Console.WriteLine("HTTPS disabled: " + ex.GetType().Name + " - " + ex.Message);
+            }
+        }
+
+        private void RegisterHttpsStream(TcpClient client, SslStream ssl) {
+            httpsMutex.WaitOne();
+            try {
+                if (!httpsStreams.ContainsKey(client))
+                    httpsStreams.Add(client, ssl);
+                else
+                    httpsStreams[client] = ssl;
+            } finally {
+                httpsMutex.ReleaseMutex();
+            }
+        }
+
+        private SslStream GetHttpsStream(TcpClient client) {
+            httpsMutex.WaitOne();
+            try {
+                SslStream ssl;
+                if (httpsStreams.TryGetValue(client, out ssl))
+                    return ssl;
+                return null;
+            } finally {
+                httpsMutex.ReleaseMutex();
+            }
+        }
+
+        private void UnregisterHttpsStream(TcpClient client) {
+            httpsMutex.WaitOne();
+            try {
+                if (httpsStreams.ContainsKey(client))
+                    httpsStreams.Remove(client);
+            } finally {
+                httpsMutex.ReleaseMutex();
+            }
+        }
+
+        protected override void GetClient(TcpClient Client, ulong clientID) {
+            if (!httpsEnabled || httpsCertificate == null) {
+                base.GetClient(Client, clientID);
+                return;
+            }
+
+            Regex CR = new Regex(@"Content-Length: (\d+)", RegexOptions.IgnoreCase);
+
+            string Request = "";
+            string Header = null;
+            List<byte> Body = new List<byte>();
+
+            int bRead = -1;
+            int posCRLF = -1;
+            int receivedBytes = 0;
+            int contentLength = 0;
+
+            SslStream ssl = null;
+
+            try {
+                ssl = new SslStream(Client.GetStream(), false);
+                var protocols = SslProtocols.Tls12 | SslProtocols.Tls11 | SslProtocols.Tls;
+                ssl.AuthenticateAsServer(httpsCertificate, false, protocols, false);
+                RegisterHttpsStream(Client, ssl);
+
+                while ((bRead = ssl.ReadByte()) >= 0) {
+                    receivedBytes++;
+                    Body.Add((byte)bRead);
+
+                    if (_OnlyHTTP && (receivedBytes == 1)) {
+                        if ((bRead != 0x47) && (bRead != 0x50)) {
+                            onBadClient(Client, clientID, Body.ToArray());
+                            return;
+                        }
+                    }
+
+                    Request += (char)bRead;
+                    if (bRead == 0x0A)
+                        posCRLF = Request.IndexOf("\r\n\r\n");
+                    if (posCRLF >= 0 || Request.Length > _MaxHeaderSize)
+                        break;
+                }
+
+                if (Request.Length > _MaxHeaderSize) {
+                    HttpClientSendError(Client, 414, "414 Header Too Long");
+                    return;
+                }
+
+                bool valid = (posCRLF > 0);
+                if ((!valid) && _OnlyHTTP) {
+                    onBadClient(Client, clientID, Body.ToArray());
+                    return;
+                }
+
+                if (valid) {
+                    Body.Clear();
+                    Header = Request;
+
+                    Match mx = CR.Match(Request);
+                    if (mx.Success)
+                        contentLength = int.Parse(mx.Groups[1].Value);
+
+                    if (contentLength > 0) {
+                        Request = "";
+                        while ((bRead = ssl.ReadByte()) >= 0) {
+                            receivedBytes++;
+                            Body.Add((byte)bRead);
+
+                            string rcvd = _requestEnc.GetString(new byte[] { (byte)bRead }, 0, 1);
+                            Request += rcvd;
+                            if (Request.Length >= contentLength || Request.Length > _MaxBodySize)
+                                break;
+                        }
+
+                        if (Request.Length > _MaxBodySize) {
+                            HttpClientSendError(Client, 413, "413 Request Entity Too Large");
+                            return;
+                        }
+                    }
+                }
+
+                base.GetClientRequest(Client, clientID, Request, Header, Body.ToArray());
+            } catch (Exception ex) {
+                LastError = ex;
+                LastErrTime = DateTime.Now;
+                ErrorsCounter++;
+                onError(Client, clientID, ex);
+            }
+        }
+
+        protected override void HttpClientSendData(TcpClient Client, byte[] body, IDictionary<string, string> dopHeaders, int ResponseCode, string ContentType) {
+            if (!httpsEnabled) {
+                base.HttpClientSendData(Client, body, dopHeaders, ResponseCode, ContentType);
+                return;
+            }
+
+            SslStream ssl = GetHttpsStream(Client);
+            if (ssl == null) {
+                base.HttpClientSendData(Client, body, dopHeaders, ResponseCode, ContentType);
+                return;
+            }
+
+            string header = "HTTP/1.1 " + ResponseCode.ToString() + "\r\n";
+
+            string val = null;
+            if (dopHeaders != null && (val = DictGetKeyIgnoreCase(dopHeaders, "Status")) != null)
+                header = "HTTP/1.1 " + val + "\r\n";
+
+            _headers_mutex.WaitOne();
+            try {
+                foreach (KeyValuePair<string, string> kvp in _headers)
+                    header += string.Format("{0}: {1}\r\n", kvp.Key, kvp.Value);
+            } finally { _headers_mutex.ReleaseMutex(); }
+
+            if (dopHeaders != null) {
+                foreach (KeyValuePair<string, string> kvp in dopHeaders) {
+                    if (string.Equals(kvp.Key, "Status", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    header += string.Format("{0}: {1}\r\n", kvp.Key, kvp.Value);
+                }
+            }
+
+            if (!DictHasKeyIgnoreCase(dopHeaders, "Content-type"))
+                header += "Content-type: " + ContentType + "\r\n";
+            if (!DictHasKeyIgnoreCase(dopHeaders, "Content-Length"))
+                header += "Content-Length: " + (body != null ? body.Length.ToString() : "0") + "\r\n";
+            header += "\r\n";
+
+            byte[] headerBytes = Encoding.GetEncoding(1251).GetBytes(header);
+
+            ssl.Write(headerBytes, 0, headerBytes.Length);
+            if (body != null && body.Length > 0)
+                ssl.Write(body, 0, body.Length);
+            ssl.Flush();
+        }
+
+        protected override void HttpClientSendData(TcpClient Client, byte[] body) {
+            HttpClientSendData(Client, body, null, 200, "text/html");
+        }
+
+        protected override void HttpClientSendData(TcpClient Client, byte[] body, IDictionary<string, string> dopHeaders) {
+            HttpClientSendData(Client, body, dopHeaders, 200, "text/html");
+        }
+
+        protected override void HttpClientSendData(TcpClient Client, byte[] body, IDictionary<string, string> dopHeaders, int ResponseCode) {
+            HttpClientSendData(Client, body, dopHeaders, ResponseCode, "text/html");
+        }
+
+        protected override void HttpClientSendData(TcpClient Client, byte[] body, IDictionary<string, string> dopHeaders, string ContentType) {
+            HttpClientSendData(Client, body, dopHeaders, 200, ContentType);
+        }
+
+        protected override void HttpClientSendText(TcpClient Client, string Text, IDictionary<string, string> dopHeaders) {
+            string body = "<html><body>" + Text + "</body></html>";
+            HttpClientSendData(Client, ResponseEncoding.GetBytes(body), dopHeaders, 200, "text/html");
+        }
+
+        protected override void HttpClientSendText(TcpClient Client, string Text) {
+            HttpClientSendText(Client, Text, null);
+        }
+
+        protected override void HttpClientSendError(TcpClient Client, int Code, Dictionary<string, string> dopHeaders) {
+            string CodeStr = Code.ToString() + " " + ((HttpStatusCode)Code).ToString();
+            string body = "<html><body><h1>" + CodeStr + "</h1></body></html>";
+            HttpClientSendData(Client, ResponseEncoding.GetBytes(body), dopHeaders, Code, "text/html");
+        }
+
+        protected override void HttpClientSendError(TcpClient Client, int Code) {
+            HttpClientSendError(Client, Code, (Dictionary<string, string>)null);
+        }
+
+        protected override void HttpClientSendError(TcpClient Client, int Code, string Text) {
+            HttpClientSendData(Client, ResponseEncoding.GetBytes(Text), null, Code, "text/html");
+        }
+
+        protected override void HttpClientSendFile(TcpClient Client, string fileName, Dictionary<string, string> dopHeaders, int ResponseCode, string ContentType) {
+            if (!File.Exists(fileName)) {
+                HttpClientSendError(Client, 404);
+                return;
+            }
+
+            FileInfo fi = new FileInfo(fileName);
+            byte[] body = File.ReadAllBytes(fileName);
+
+            if (string.IsNullOrEmpty(ContentType))
+                ContentType = GetMemeType(fi.Extension.ToLower());
+
+            HttpClientSendData(Client, body, dopHeaders, ResponseCode, ContentType);
+        }
+
+
+		/* HTTPS */
 
         protected override void GetClientRequest(ClientRequest Request)
         {
@@ -64,7 +324,6 @@ namespace APRSWebServer
 				return;
 			}
 
-#if SQLITE
 			if (Request.Query == "/userdata")
 			{
 				try
@@ -122,13 +381,11 @@ namespace APRSWebServer
 					return;
 				}
 			}
-#endif
 
             if (!HttpClientWebSocketInit(Request, false))
                 PassFileToClientByRequest(Request, GetCurrentDir() + @"\map");
         }
 
-#if SQLITE
 		private IEnumerable<string> GetLatestPositionsFromDb(string dbPath, int limit)
 		{
 			var rows = new List<string>();
@@ -180,7 +437,6 @@ namespace APRSWebServer
 			}
 			return rows;
 		}
-#endif
 
 		private static string HtmlEncode(string s)
 		{
@@ -585,7 +841,6 @@ namespace APRSWebServer
             if (aprsServer.OutConnectionsToConsole)
                 Console.WriteLine("WebSocket connected from: {0}:{1}, total {2}", clientRequest.RemoteIP, ((IPEndPoint)clientRequest.Client.Client.RemoteEndPoint).Port, wsClients.Count);
 
-#if SQLITE
 			if (aprsServer.StoreGPSInMemory) {
 				PassBuds(clientRequest);
 			} else {
@@ -604,13 +859,6 @@ namespace APRSWebServer
 					} finally { wsMutex.ReleaseMutex(); }
 				}
 			}
-#else
-            PassBuds(clientRequest);
-
-            if ((aprsServer.OutBroadcastsMessages) && (aprsServer.BUDs.Count > 0))
-                Console.WriteLine("Passed {0} buddies to WS {1}:{2}", aprsServer.BUDs.Count, clientRequest.RemoteIP, ((IPEndPoint)clientRequest.Client.Client.RemoteEndPoint).Port);
-#endif
-
         }
 
         protected override void OnWebSocketClientDisconnected(ClientRequest clientRequest)

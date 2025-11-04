@@ -737,9 +737,9 @@
 				applyFilter();
 
 				var socket = null;
-				var Reconnect = function() { 
-					var socket_url = 'ws://'+location.hostname+':8060/';
-					socket = new WebSocket(socket_url);
+				var Reconnect = function() {
+					var wsURL   = (location.protocol === "https:") ? "wss://" : "ws://" + location.host;
+					var socket  = new WebSocket(wsURL);
 					socket.onopen = function() { };
 					socket.onmessage = function (evt) {
 						UpdateFromWebSocket(evt.data);
